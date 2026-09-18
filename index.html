@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="es" class="w-full max-w-full overflow-x-hidden">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Visor Bajo de Fuera - CP</title>
+
+    <!-- PWA & Mobile Web App Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Bajo de Fuera">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="icon" type="image/webp" href="visor_favicon.webp">
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase SDK (Compat v10) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+
+    <!-- Polyfill to enable native HTML5 Drag and Drop API on Mobile Touch screens -->
+    <script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
+
+    <!-- jsPDF UMD (Exportación de PDF Vectorial) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Global Styles -->
+    <link rel="stylesheet" href="styles.css?v=4.1">
+</head>
+
+<body class="p-2 md:p-6 text-slate-800 flex flex-col min-h-[100dvh] bg-slate-50 md:bg-[#f4f7f6] w-full max-w-full overflow-x-hidden">
+
+    <!-- =========================================================================
+         HEADER PRINCIPAL (ESTRUCTURA IDÉNTICA A VISOR RESERVA)
+         ========================================================================= -->
+    <header class="main-header bg-white rounded-xl shadow-sm border border-slate-200 p-2 md:p-4 mb-2 md:mb-4 flex flex-col md:flex-row justify-between items-center gap-2 shrink-0">
+        <div id="header-branding" class="flex items-center gap-2 md:gap-4 min-w-0 w-full md:w-auto justify-between md:justify-start">
+            <div class="flex items-center gap-2 md:gap-4">
+                <img src="apple-touch-icon.png" alt="Visor Logo" class="w-8 h-8 md:w-12 md:h-12 object-contain shrink-0 drop-shadow-sm rounded-lg">
+                <div class="min-w-0">
+                    <h1 class="font-black text-xs sm:text-sm md:text-lg text-slate-900 leading-tight tracking-tight whitespace-nowrap">CABO DE PALOS</h1>
+                    <h2 class="font-bold text-blue-600 tracking-wide text-[9px] md:text-sm uppercase leading-none">VISOR BAJO DE FUERA</h2>
+                </div>
+            </div>
+
+            <!-- Login botón en móvil -->
+            <div class="md:hidden flex items-center gap-2">
+                <button id="btn-login-mobile" onclick="openLoginModal()" class="px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm">
+                    Iniciar sesión
+                </button>
+            </div>
+        </div>
+
+        <!-- Pestañas de Vista: Mensual y Estadísticas (Idéntico a Visor Reserva) -->
+        <div id="header-tabs"
+            class="flex bg-slate-100 p-1 md:p-1.5 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider overflow-x-auto justify-center">
+            <button onclick="switchView('mensual')" id="tab-mensual"
+                class="px-3 md:px-5 py-1.5 md:py-2 tab-active flex items-center gap-1.5 transition-all whitespace-nowrap">
+                <svg class="h-3.5 w-3.5 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg> Mensual
+            </button>
+            <button onclick="switchView('semanal')" id="tab-semanal"
+                class="px-3 md:px-5 py-1.5 md:py-2 tab-inactive flex items-center gap-1.5 transition-all whitespace-nowrap">
+                <svg class="h-3.5 w-3.5 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg> Semanal
+            </button>
+            <button onclick="switchView('estadisticas')" id="tab-estadisticas"
+                class="px-3 md:px-5 py-1.5 md:py-2 tab-inactive flex items-center gap-1.5 transition-all whitespace-nowrap">
+                <svg class="h-3.5 w-3.5 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg> Estadísticas
+            </button>
+        </div>
+
+        <div id="header-actions" class="flex items-center justify-end gap-1 md:gap-3 relative shrink-0">
+            <!-- Hidden input para importar CSV (Solo Admin) -->
+            <input type="file" id="csv-upload" accept=".csv" class="hidden" onchange="handleImport(event)" />
+
+            <!-- Botón Imprimir / Exportar (PDF / CSV) -->
+            <button onclick="openPrintModal()"
+                class="w-7 h-7 md:w-9 md:h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center hover:bg-slate-200 transition-colors shadow-sm"
+                title="Descargar PDF / CSV">
+                <svg class="w-3.5 h-3.5 md:w-5 md:h-5" fill="none" stroke="currentColor" stroke-width="2"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z">
+                    </path>
+                </svg>
+            </button>
+
+            <!-- Botón Historial -->
+            <button onclick="switchView('historial')" id="btn-header-historial"
+                class="w-7 h-7 md:w-9 md:h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center hover:bg-slate-200 transition-colors shadow-sm"
+                title="Historial de Actividad">
+                <svg class="w-3.5 h-3.5 md:w-5 md:h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </button>
+
+            <!-- Botón Instrucciones / Ayuda -->
+            <button onclick="openHelpModal()"
+                class="w-7 h-7 md:w-9 md:h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-colors shadow-sm"
+                title="Instrucciones">
+                <span class="font-black text-sm md:text-lg">?</span>
+            </button>
+
+            <!-- Botón Login Desktop -->
+            <button id="btn-login-header" onclick="openLoginModal()"
+                class="px-2.5 py-1 md:px-5 md:py-2 rounded-lg text-xs md:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm">
+                Iniciar sesión
+            </button>
+
+            <!-- Badge y Dropdown de Usuario Autenticado -->
+            <div class="relative hidden" id="user-menu-wrapper">
+                <div class="relative inline-block">
+                    <button onclick="toggleUserMenu(event)" id="user-badge-button"
+                        class="rounded-[4px] px-2 py-1 md:px-3 md:py-2 text-[9px] md:text-[10px] font-bold shadow-sm flex items-center gap-1.5 md:gap-2 hover:opacity-90 transition-opacity bg-slate-200 text-slate-600">
+                        <span class="bg-black/10 px-1.5 rounded-sm" id="badge-initial">INV</span>
+                        <span class="tracking-wide" id="badge-name">Invitado (Lectura)</span>
+                        <svg class="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+                    <!-- Indicador de Notificaciones Pendientes -->
+                    <span id="notif-bubble" onclick="openNotificationsModal()"
+                        class="absolute -top-2 -right-2 flex h-5 w-5 hidden items-center justify-center z-50 cursor-pointer hover:scale-110 transition-transform">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"
+                            style="animation-duration: 1.5s;"></span>
+                        <span
+                            class="relative inline-flex rounded-full h-5 w-5 bg-red-500 border border-white text-[10px] font-black text-white items-center justify-center shadow-md"
+                            id="notif-count">0</span>
+                    </span>
+                </div>
+                <div id="user-dropdown"
+                    class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 flex flex-col overflow-hidden">
+                    <!-- Rellenado dinámicamente por ui.js -->
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- =========================================================================
+         BARRA DE CONTROL Y FILTROS (ESTILO VISOR + SHEET)
+         ========================================================================= -->
+    <div id="global-filter-bar"
+        class="bg-white rounded-xl shadow-sm border border-slate-200 px-3 md:px-5 py-2 md:py-3 mb-2 md:mb-4 shrink-0 flex items-center justify-between gap-3 relative z-40 transition-all flex-wrap w-full max-w-full">
+        
+        <!-- Filtro desplegable de Centros con Checkboxes (Estilo Visor) -->
+        <div class="flex items-center gap-1.5 md:gap-2 relative" id="center-filter-dropdown-wrapper">
+            <span class="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest">FILTRO:</span>
+            <button onclick="toggleFilterDropdown(event)"
+                class="flex items-center gap-1.5 md:gap-2 bg-slate-50 border border-slate-200 text-slate-800 font-bold px-2 py-1 md:px-3 md:py-1.5 rounded-lg text-[10px] md:text-xs hover:bg-slate-100 transition-colors shadow-sm shrink-0">
+                <span id="filter-button-text">TODOS LOS CENTROS</span>
+                <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+            </button>
+
+            <!-- Panel de selección de centros con checkboxes -->
+            <div id="filter-dropdown-panel"
+                class="hidden absolute left-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-xl z-50 flex flex-col overflow-hidden">
+                <div class="p-2 border-b border-slate-100 bg-slate-50 flex justify-between gap-2">
+                    <button onclick="setAllFilters(true)"
+                        class="flex-1 text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold py-1.5 rounded transition-colors shadow-sm">Todos</button>
+                    <button onclick="setAllFilters(false)"
+                        class="flex-1 text-[10px] bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold py-1.5 rounded transition-colors shadow-sm">Ninguno</button>
+                </div>
+                <div class="max-h-64 overflow-y-auto p-2 flex flex-col gap-1" id="filter-checkboxes-container">
+                    <!-- Generado dinámicamente -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Botón Volver al Calendario a la derecha -->
+        <div class="flex items-center gap-3">
+            <button onclick="switchView('mensual')" id="btn-back-to-calendar" class="hidden text-xs font-bold text-blue-600 hover:underline">
+                ← Volver al Calendario
+            </button>
+        </div>
+
+    </div>
+
+    <!-- =========================================================================
+         ÁREA DE CONTENIDO PRINCIPAL: BARRA LATERAL IZQUIERDA + VISTA MENSUAL
+         ========================================================================= -->
+    <div class="flex flex-col md:flex-row gap-4 w-full items-start">
+        
+        <!-- Barra Lateral Izquierda (Navegación de Año y Meses) -->
+        <aside class="w-full md:w-44 lg:w-48 shrink-0 flex flex-col gap-2.5">
+            
+            <!-- Botón ESTE MES -->
+            <button onclick="goToCurrentMonth()"
+                class="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 group">
+                <svg class="w-4 h-4 text-blue-200 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <span>Este Mes</span>
+            </button>
+
+            <!-- Bloque Acordeón del Año 2026 -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col w-full">
+                <button id="year-btn-2026" onclick="toggleYearMonths(2026)"
+                    class="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border-slate-200 flex items-center justify-between text-xs font-black text-slate-800 transition-colors cursor-pointer select-none">
+                    <span class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                        <span class="tracking-wide">2026</span>
+                    </span>
+                    <svg id="year-chevron-2026" class="w-3.5 h-3.5 text-slate-500 transform transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+
+                <!-- Lista de Botones de Meses de 2026 -->
+                <div id="year-months-list-2026" class="p-1.5 flex flex-col gap-1">
+                    <!-- Generado dinámicamente por renderLeftNavigation() en ui.js -->
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- Contenedor Principal (Calendario Mensual o Historial) -->
+        <main id="main-view-container" class="flex-1 w-full min-w-0">
+            <!-- Renderizado dinámicamente por ui.js -->
+        </main>
+
+    </div>
+
+    <!-- =========================================================================
+         MODALES
+         ========================================================================= -->
+
+    <!-- Modal de Login -->
+    <div id="password-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 transform transition-all">
+            <div class="flex items-center gap-3 mb-2">
+                <svg class="w-6 h-6 text-slate-800" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"></path>
+                </svg>
+                <h3 class="text-xl font-black text-slate-800">Acceso al Visor</h3>
+            </div>
+            <p class="text-sm text-slate-500 mb-4">Selecciona tu usuario e introduce la contraseña.</p>
+
+            <label class="block text-xs font-bold text-slate-700 mb-1">Usuario / Centro</label>
+            <select id="login-user" class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 font-bold text-slate-700 cursor-pointer">
+                <option value="admin">Administrador (Root)</option>
+                <option value="mangamar">Mangamar</option>
+                <option value="moondive">Moondive</option>
+                <option value="hormigas">Islas Hormigas</option>
+                <option value="naranjito">Naranjito</option>
+                <option value="planeta">Planeta Azul</option>
+                <option value="divers">Divers</option>
+                <option value="club">CLUB</option>
+                <option value="xlm">X La Manga</option>
+            </select>
+
+            <label class="block text-xs font-bold text-slate-700 mb-1">Contraseña</label>
+            <div class="relative">
+                <input type="password" id="login-password" class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2 font-mono pr-10" placeholder="••••••••" onkeypress="if(event.key === 'Enter') verifyLogin()">
+                <button type="button" onclick="togglePassword()" class="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none">
+                    <svg id="eye-icon" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                </button>
+            </div>
+
+            <p id="password-error" class="text-xs text-red-500 font-bold hidden mb-4 text-center">Contraseña incorrecta.</p>
+
+            <div class="flex gap-3 mt-4">
+                <button onclick="hideEl('password-modal')" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">Cancelar</button>
+                <button onclick="verifyLogin()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm">Entrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         MODAL MODIFICAR SALIDA (Idéntico a visor-reserva)
+         ========================================================================= -->
+    <div id="edit-salida-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 transform transition-all">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-slate-800 leading-tight">Modificar Salida</h3>
+                    <p id="edit-salida-title" class="text-xs font-bold text-slate-500">Bajo de Fuera</p>
+                </div>
+            </div>
+
+            <p id="edit-salida-avail" class="text-sm font-bold text-blue-600 mb-4 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
+                Plazas disponibles: 30
+            </p>
+
+            <label class="block text-xs font-bold text-slate-700 mb-1">Modificar plazas:</label>
+            <input type="number" id="edit-salida-pax" min="1" max="12"
+                class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 font-mono text-lg font-bold text-slate-800"
+                onkeydown="if(event.key === 'Enter') { event.preventDefault(); confirmEditSalida(); }">
+
+            <div id="edit-salida-center-container" class="mb-4 hidden">
+                <label class="block text-xs font-bold text-slate-700 mb-1">Asignar a Centro (Modo Admin)</label>
+                <select id="edit-salida-center" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" onkeydown="if(event.key === 'Enter') { event.preventDefault(); confirmEditSalida(); }">
+                    <option value="M">Mangamar</option>
+                    <option value="MD">Moondive</option>
+                    <option value="H">Islas Hormigas</option>
+                    <option value="N">Naranjito</option>
+                    <option value="P">Planeta Azul</option>
+                    <option value="D">Divers</option>
+                    <option value="C">CLUB</option>
+                    <option value="X">X La Manga</option>
+                </select>
+            </div>
+
+            <label class="block text-xs font-bold text-slate-700 mb-1">Nota (Opcional):</label>
+            <textarea id="edit-salida-note" maxlength="200" rows="2"
+                class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-6 text-sm text-slate-800 resize-none"
+                placeholder="Añade una nota..."
+                onkeydown="if(event.key === 'Enter') { event.preventDefault(); confirmEditSalida(); }"></textarea>
+
+            <div class="flex flex-col gap-2.5">
+                <div class="flex gap-2.5">
+                    <button onclick="cancelEditSalida()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm cursor-pointer">Cancelar</button>
+                    <button id="btn-save-edit-salida" onclick="confirmEditSalida()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm cursor-pointer">Guardar Cambios</button>
+                </div>
+                <!-- Opción 5: Ceder Plazas (Cesión Directa) -->
+                <button id="btn-open-cesion-directa" onclick="openCesionDirectaFromEdit()" class="w-full px-4 py-2.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors shadow-xs flex justify-center items-center gap-1.5 cursor-pointer">
+                    <span>🎁 Ceder Plazas a Otra Escuela</span>
+                </button>
+                <button onclick="promptDeleteSalida()" class="w-full px-4 py-2.5 rounded-lg text-xs font-bold text-red-600 border border-red-200 hover:bg-red-50 transition-colors shadow-xs flex justify-center items-center gap-1.5 cursor-pointer">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg> Eliminar Salida Completamente
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Cesión Directa (Section 3.1) -->
+    <div id="cesion-directa-modal" class="fixed inset-0 z-[105] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 transform transition-all">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0 text-xl">
+                    🎁
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-slate-800 leading-tight">Ceder Plazas</h3>
+                    <p id="cesion-directa-subtitle" class="text-xs font-bold text-slate-500">Bajo de Fuera</p>
+                </div>
+            </div>
+
+            <p id="cesion-directa-info" class="text-xs font-bold text-slate-600 mb-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                Tienes 10 plazas asignadas en esta salida.
+            </p>
+
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-slate-700 mb-1">Escuela receptora:</label>
+                <select id="cesion-directa-target-center" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer">
+                    <!-- Opciones de centros se rellenan dinámicamente -->
+                </select>
+            </div>
+
+            <div class="mb-4 space-y-2.5">
+                <label class="flex items-center gap-2.5 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                    <input type="radio" name="cesion_type" id="cesion-type-partial" value="partial" class="w-4 h-4 text-amber-600 focus:ring-amber-500" checked onchange="getEl('cesion-pax-container').classList.remove('hidden')">
+                    <span class="text-xs font-bold text-slate-700">Número de plazas</span>
+                </label>
+
+                <div id="cesion-pax-container" class="pl-6">
+                    <input type="number" id="cesion-directa-pax" min="1" max="12" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold text-slate-800 text-sm" placeholder="Ej: 4">
+                </div>
+
+                <label class="flex items-center gap-2.5 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                    <input type="radio" name="cesion_type" id="cesion-type-full" value="full" class="w-4 h-4 text-amber-600 focus:ring-amber-500" onchange="getEl('cesion-pax-container').classList.add('hidden')">
+                    <span class="text-xs font-bold text-slate-700">Barco completo (todas las plazas)</span>
+                </label>
+            </div>
+
+            <div class="mb-5">
+                <label class="block text-xs font-bold text-slate-700 mb-1">Nota (Opcional):</label>
+                <input type="text" id="cesion-directa-note" maxlength="100" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500" placeholder="Ej: Os las cedemos para vuestro grupo">
+            </div>
+
+            <div class="flex gap-2.5">
+                <button onclick="cancelCesionDirecta()" class="w-1/2 px-4 py-2.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer">Cancelar</button>
+                <button onclick="confirmCesionDirecta()" class="w-1/2 px-4 py-2.5 rounded-lg text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors shadow-sm cursor-pointer">Ceder Plazas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Confirmar Eliminación -->
+    <div id="delete-confirm-modal" class="fixed inset-0 z-[110] hidden flex items-center justify-center bg-slate-900/50 backdrop-blur-sm transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 text-center transform transition-all">
+            <div class="mx-auto w-16 h-16 rounded-full mb-4 flex items-center justify-center bg-red-100 text-red-600">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+            </div>
+            <h3 class="text-xl font-black text-slate-800 mb-2">¿Eliminar Salida?</h3>
+            <p id="delete-confirm-msg" class="text-sm text-slate-500 mb-6">Esta acción liberará las plazas y se registrará en el historial.</p>
+            <div class="flex gap-3">
+                <button onclick="cancelDeleteSalida()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">Volver</button>
+                <button onclick="confirmDeleteSalida()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm">Sí, Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pedir / Solicitar Plazas (Donation Request) -->
+    <div id="donation-request-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 transform transition-all">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                    <span class="text-xl">🤲</span>
+                </div>
+                <div>
+                    <h3 id="donation-title" class="text-xl font-black text-slate-800 leading-tight">Solicitar Plazas</h3>
+                    <p id="donation-subtitle" class="text-xs font-bold text-slate-500">Bajo de Fuera</p>
+                </div>
+            </div>
+
+            <p id="donation-pax-info" class="text-sm font-bold text-slate-600 mb-4 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                El centro tiene 10 plazas asignadas.
+            </p>
+
+            <div class="mb-6 space-y-3">
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                    <input type="radio" name="donation_type" id="donation-type-partial" value="partial" class="w-4 h-4 text-blue-600 focus:ring-blue-500" checked onchange="getEl('donation-pax-container').classList.remove('hidden')">
+                    <span class="text-sm font-bold text-slate-700">Plazas sueltas</span>
+                </label>
+
+                <div id="donation-pax-container" class="pl-7">
+                    <input type="number" id="donation-pax" min="1" max="12" class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-800" placeholder="Ej: 2">
+                </div>
+
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                    <input type="radio" name="donation_type" id="donation-type-full" value="full" class="w-4 h-4 text-blue-600 focus:ring-blue-500" onchange="getEl('donation-pax-container').classList.add('hidden')">
+                    <span class="text-sm font-bold text-slate-700">Barco completo</span>
+                </label>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="cancelDonationRequest()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">Cancelar</button>
+                <button onclick="confirmDonationRequest()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm">Solicitar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Intercambiar / Ocupar Hueco Libre (Swap Choice Modal) -->
+    <div id="swap-choice-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-md border border-slate-100 transform transition-all">
+            <div class="flex items-center gap-4 mb-5">
+                <div class="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 id="swap-choice-title" class="text-xl font-black text-slate-800 tracking-tight">Elegir Acción</h3>
+                    <p id="swap-choice-subtitle" class="text-xs font-bold text-slate-500 uppercase tracking-wide">Múltiples Opciones</p>
+                </div>
+            </div>
+            <div id="swap-choice-buttons" class="flex flex-col gap-2"></div>
+            <button onclick="cancelSwapChoice()" class="w-full mt-4 px-4 py-3.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Modal Añadir Salida (Idéntico a visor-reserva) -->
+    <div id="new-salida-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 transform transition-all">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-slate-800 leading-tight">Añadir Salida</h3>
+                    <p id="new-salida-title" class="text-xs font-bold text-slate-500">Bajo de Fuera</p>
+                </div>
+            </div>
+
+            <p id="new-salida-avail" class="text-sm font-bold text-green-600 mb-4 bg-green-50 px-3 py-2 rounded-lg border border-green-100">
+                Plazas disponibles: 30
+            </p>
+
+            <div id="new-salida-pax-container" class="mb-4">
+                <label class="block text-xs font-bold text-slate-700 mb-1">¿Cuántas plazas necesitas?</label>
+                <input type="number" id="new-salida-pax" min="1" max="12"
+                    class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-lg font-bold text-slate-800"
+                    placeholder="Ej: 8"
+                    onkeydown="if(event.key === 'Enter') { event.preventDefault(); confirmNewSalida(); }">
+            </div>
+
+            <div id="new-salida-center-container" class="mb-6 hidden">
+                <label class="block text-xs font-bold text-slate-700 mb-1">Asignar a Centro (Modo Admin)</label>
+                <select id="new-salida-center" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" onkeydown="if(event.key === 'Enter') { event.preventDefault(); confirmNewSalida(); }">
+                    <option value="mangamar">Mangamar</option>
+                    <option value="moondive">Moondive</option>
+                    <option value="hormigas">Islas Hormigas</option>
+                    <option value="naranjito">Naranjito</option>
+                    <option value="planeta">Planeta Azul</option>
+                    <option value="divers">Divers</option>
+                    <option value="club">CLUB</option>
+                    <option value="xlm">X La Manga</option>
+                </select>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="cancelNewSalida()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">Cancelar</button>
+                <button id="btn-confirm-new-salida" onclick="confirmNewSalida()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm flex justify-center items-center gap-2">
+                    Siguiente <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Confirmar WhatsApp (Aviso Automático - Idéntico a visor-reserva) -->
+    <div id="whatsapp-confirm-modal" class="fixed inset-0 z-[120] hidden flex items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-md border border-slate-100 transform transition-all">
+            <div class="flex items-center gap-4 mb-5">
+                <div class="w-12 h-12 rounded-full bg-[#e1fbe8] flex items-center justify-center text-[#25D366] shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-slate-800 tracking-tight">Confirmar <span id="wa-action-type">Acción</span></h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">AVISO AUTOMÁTICO</p>
+                </div>
+            </div>
+            <p class="text-sm text-slate-600 mb-3 font-medium">Se actualizará la nube y se publicará este mensaje automático en el grupo de WhatsApp de la Reserva Marina:</p>
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 text-sm text-slate-700 italic shadow-inner leading-relaxed">
+                <span id="confirm-whatsapp-msg" class="block font-medium whitespace-pre-wrap"></span>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="cancelWhatsAppAction()" class="flex-1 px-4 py-3.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">Cancelar</button>
+                <button id="btn-confirm-wa" onclick="confirmWhatsAppAction()" class="flex-1 px-4 py-3.5 rounded-xl text-sm font-bold text-white bg-[#25D366] hover:bg-[#1ebd5a] transition-colors flex justify-center items-center gap-2 shadow-md">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                    </svg> Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Cambiar Contraseña -->
+    <div id="change-password-modal" class="fixed inset-0 z-[110] hidden flex items-center justify-center bg-slate-900/50 backdrop-blur-sm transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4v-3.252a1 1 0 01.293-.707l8.96-8.96A6 6 0 0115 7z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-slate-800 leading-tight">Cambiar Contraseña</h3>
+                </div>
+            </div>
+
+            <label class="block text-xs font-bold text-slate-700 mb-1">Nueva Contraseña (mín. 6 caracteres)</label>
+            <input type="password" id="new-password-input" class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 font-mono text-sm" placeholder="••••••••" onkeypress="if(event.key === 'Enter') executeChangePassword()">
+
+            <div class="flex gap-3">
+                <button onclick="hideEl('change-password-modal')" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">Cancelar</button>
+                <button onclick="executeChangePassword()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm">Actualizar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         MODAL IMPORTAR CSV
+         ========================================================================= -->
+    <div id="import-csv-modal" class="fixed inset-0 z-[120] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 transform transition-all max-h-[92vh] overflow-y-auto flex flex-col">
+            <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-black text-slate-800 leading-tight">Importar Cuadrante CSV</h3>
+                        <p class="text-xs text-slate-500 font-medium">Columnas: <b>date, dive_center, spots</b></p>
+                    </div>
+                </div>
+                <button onclick="closeImportCsvModal()" class="text-slate-400 hover:text-slate-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Botón pre-cargado: Cuadrante Oficial 2026 -->
+            <div class="mb-4 bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex items-center justify-between gap-2">
+                <div>
+                    <p class="text-xs font-black text-blue-900">Cuadrante Oficial 2026 (Sep - Dic)</p>
+                    <p class="text-[11px] text-blue-700 font-medium">312 salidas (Septiembre, Octubre, Noviembre, Diciembre 2026)</p>
+                </div>
+                <button onclick="loadDefault2026Csv()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer">
+                    <span>⚡ Cargar 2026</span>
+                </button>
+            </div>
+
+            <!-- Selector de archivo CSV -->
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-slate-700 mb-1.5">Seleccionar archivo .CSV</label>
+                <div class="flex items-center justify-center w-full">
+                    <label class="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                        <div class="flex flex-col items-center justify-center pt-2 pb-2">
+                            <svg class="w-6 h-6 mb-1 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                            <p class="text-xs text-slate-600 font-bold"><span class="text-blue-600">Haz clic para buscar</span> o arrastra el archivo aquí</p>
+                            <p class="text-[10px] text-slate-400">Archivos .csv delimitados por comas o punto y coma</p>
+                        </div>
+                        <input type="file" id="csv-file-input" accept=".csv,text/csv" class="hidden" onchange="handleCsvFileSelect(event)">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Pegar texto CSV directamente -->
+            <div class="mb-4">
+                <div class="flex items-center justify-between mb-1">
+                    <label class="text-xs font-bold text-slate-700">O pegar contenido CSV:</label>
+                    <button onclick="clearCsvInput()" class="text-[10px] font-bold text-slate-400 hover:text-slate-600">Limpiar</button>
+                </div>
+                <textarea id="csv-paste-textarea" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800" placeholder="date,dive_center,spots&#10;2026-09-01,Divers,8&#10;2026-09-01,Clubes,6..." oninput="handleCsvTextInput(this.value)"></textarea>
+            </div>
+
+            <!-- Resumen de Vista Previa -->
+            <div id="csv-preview-container" class="hidden mb-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                <h4 class="text-xs font-black text-slate-800 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Vista Previa de Importación
+                </h4>
+                <div class="grid grid-cols-3 gap-2 text-center mb-3">
+                    <div class="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Días</p>
+                        <p id="csv-preview-days" class="text-base font-black text-slate-800">-</p>
+                    </div>
+                    <div class="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Salidas</p>
+                        <p id="csv-preview-salidas" class="text-base font-black text-blue-600">-</p>
+                    </div>
+                    <div class="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Plazas</p>
+                        <p id="csv-preview-spots" class="text-base font-black text-emerald-600">-</p>
+                    </div>
+                </div>
+                <p id="csv-preview-range" class="text-[11px] text-slate-600 font-bold mb-1"></p>
+                <div id="csv-preview-centers" class="flex flex-wrap gap-1.5 mt-2"></div>
+            </div>
+
+            <!-- Checkbox Sobrescribir -->
+            <label class="flex items-center gap-2 mb-5 cursor-pointer select-none">
+                <input type="checkbox" id="csv-overwrite-check" checked class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500">
+                <span class="text-xs font-bold text-slate-700">Sobrescribir salidas existentes en las fechas importadas</span>
+            </label>
+
+            <!-- Botones de Acción -->
+            <div class="flex gap-3 mt-auto pt-2 border-t border-slate-100">
+                <button onclick="closeImportCsvModal()" class="w-1/3 px-4 py-3 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">Cancelar</button>
+                <button id="btn-do-import-csv" onclick="confirmImportCsv()" disabled class="w-2/3 px-4 py-3 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center gap-2">
+                    <span>Confirmar Importación</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         MODAL DE CONFIRMACIÓN VACIAR DATOS (EXACTAMENTE IGUAL A VISOR RESERVA)
+         ========================================================================= -->
+    <div id="empty-confirm-modal"
+        class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-slate-900/50 backdrop-blur-sm transition-opacity p-4">
+        <div
+            class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 text-center transform transition-all">
+            <div class="mx-auto w-16 h-16 rounded-full mb-4 flex items-center justify-center bg-red-100 text-red-600">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                    </path>
+                </svg>
+            </div>
+            <h3 class="text-xl font-black text-slate-800 mb-2">¿Borrar toda la base de datos?</h3>
+            <p class="text-sm text-slate-500 mb-6">Se ha descargado una copia de seguridad. ¿Estás seguro de que quieres
+                vaciar la base de datos en la nube permanentemente?</p>
+            <div class="flex gap-3">
+                <button id="btn-cancel-empty" onclick="hideEl('empty-confirm-modal')"
+                    class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">Cancelar</button>
+                <button id="btn-confirm-empty" onclick="executeEmptyData()"
+                    class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm">Sí,
+                    vaciar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         MODAL DE EXPORTAR / IMPRIMIR (EXACTAMENTE IGUAL A VISOR RESERVA)
+         ========================================================================= -->
+    <div id="print-modal"
+        class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 transform transition-all">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z">
+                        </path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-slate-800 leading-tight">Exportar Datos</h3>
+                    <p class="text-xs font-bold text-slate-500">Descargar planificación</p>
+                </div>
+            </div>
+
+            <label class="block text-xs font-bold text-slate-700 mb-1">Formato</label>
+            <div class="flex gap-2 mb-4">
+                <button id="btn-format-pdf" onclick="selectExportFormat('pdf')"
+                    class="flex-1 py-2 px-3 border-2 border-blue-600 bg-blue-50 text-blue-700 rounded-lg font-bold text-sm transition-colors">PDF</button>
+                <button id="btn-format-csv" onclick="selectExportFormat('csv')"
+                    class="flex-1 py-2 px-3 border-2 border-slate-200 bg-white text-slate-600 hover:bg-slate-50 rounded-lg font-bold text-sm transition-colors">CSV</button>
+            </div>
+            <input type="hidden" id="export-format" value="pdf">
+
+            <label class="block text-xs font-bold text-slate-700 mb-1">Seleccionar Centro</label>
+            <select id="print-center"
+                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer mb-4"></select>
+
+            <label class="block text-xs font-bold text-slate-700 mb-1">Seleccionar Mes</label>
+            <select id="print-month"
+                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer mb-6"></select>
+
+            <div class="flex gap-3">
+                <button onclick="closePrintModal()"
+                    class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">Cancelar</button>
+                <button onclick="executeExport()"
+                    class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm flex justify-center items-center gap-2">
+                    Descargar <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Ayuda / Instrucciones -->
+    <div id="help-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity p-4" onclick="if(event.target === this) hideEl('help-modal')">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 max-h-[90vh] overflow-y-auto flex flex-col">
+            <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <h3 class="text-xl font-black text-slate-800">Instrucciones - Bajo de Fuera</h3>
+                <button onclick="hideEl('help-modal')" class="text-slate-400 hover:text-slate-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="space-y-4 text-xs text-slate-600 leading-relaxed">
+                <p><b>1. Vista Mensual:</b> Muestra todos los días del mes y qué centros tienen asignación oficial para el Bajo de Fuera (cupo aprox. 30 plazas/día).</p>
+                <p><b>2. Operaciones con Plazas:</b> Haz clic en cualquier día o centro para abrir el menú de operaciones:</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li><b>Ceder Plazas:</b> Cede plazas de tu centro a otro centro colaborador.</li>
+                    <li><b>Liberar al Pool:</b> Si no vas a llenar el barco, libera plazas al fondo común del día.</li>
+                    <li><b>Coger del Pool:</b> Si hay plazas libres en el fondo común, tómalas para tu barco (hasta máx. 12 plazas por barco).</li>
+                    <li><b>Pedir Plazas:</b> Envía una solicitud o notificación de plazas a otro centro.</li>
+                </ul>
+                <p><b>3. Filtro de Centros:</b> Utiliza el menú "FILTRO: TODOS LOS CENTROS" arriba a la izquierda para activar o desactivar centros en el calendario.</p>
+            </div>
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <button onclick="hideEl('help-modal')" class="w-full px-4 py-3 rounded-lg text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-sm">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Acción Parcial por Cupo Lleno (Idéntico a visor-reserva) -->
+    <div id="partial-action-modal"
+        class="fixed inset-0 z-[120] hidden flex items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+        <div
+            class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-100 transform transition-all">
+            <div class="flex items-center gap-3 mb-4">
+                <div
+                    class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                        </path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-slate-800 tracking-tight">Límite de Cupo</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">Ajuste Automático</p>
+                </div>
+            </div>
+            <p class="text-sm text-slate-600 mb-5 font-medium whitespace-pre-line leading-relaxed" id="partial-action-msg"></p>
+            <div class="flex gap-3">
+                <button onclick="cancelPartialAction()"
+                    class="flex-1 px-4 py-3 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">Cancelar</button>
+                <button id="btn-confirm-partial-action" onclick="confirmPartialAction()"
+                    class="flex-1 px-4 py-3 rounded-xl text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors shadow-md">Aceptar Ajuste</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Centro de Notificaciones (Intercambios y Peticiones Pendientes - Section 6) -->
+    <div id="notifications-modal"
+        class="fixed inset-0 z-[125] hidden flex items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+        <div
+            class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-slate-100 transform transition-all max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between mb-6 border-b border-slate-100 pb-4 shrink-0">
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9">
+                            </path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-black text-slate-800 leading-tight">Centro de Notificaciones</h3>
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">Solicitudes de Intercambio</p>
+                    </div>
+                </div>
+                <button onclick="closeNotificationsModal()" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Pestañas: Recibidas / Enviadas -->
+            <div class="flex border-b border-slate-200 mb-4 shrink-0">
+                <button id="notif-tab-received" onclick="switchNotificationsTab('received')" class="flex-1 py-2 text-xs font-black text-blue-600 border-b-2 border-blue-600 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>Recibidas</span>
+                    <span id="notif-count-received" class="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-100 text-blue-800 font-black hidden">0</span>
+                </button>
+                <button id="notif-tab-sent" onclick="switchNotificationsTab('sent')" class="flex-1 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>Enviadas</span>
+                    <span id="notif-count-sent" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700 font-black hidden">0</span>
+                </button>
+            </div>
+
+            <div id="notifications-list" class="overflow-y-auto space-y-3 flex-1 pr-1"></div>
+        </div>
+    </div>
+
+    <!-- Modal Gestionar Solicitud Pendiente / Retirar Petición -->
+    <div id="pending-request-action-modal"
+        onclick="if(event.target === this) hideEl('pending-request-action-modal')"
+        class="fixed inset-0 z-[130] hidden flex items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-100 transform transition-all flex flex-col">
+            <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 text-lg font-bold">
+                        ⏳
+                    </div>
+                    <div>
+                        <h3 id="pending-modal-title" class="text-base font-black text-slate-800 leading-tight">Solicitud Pendiente</h3>
+                        <p id="pending-modal-subtitle" class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Bajo de Fuera</p>
+                    </div>
+                </div>
+                <button onclick="hideEl('pending-request-action-modal')" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div id="pending-modal-content" class="text-sm text-slate-600 mb-6 space-y-3">
+                <!-- Contenido dinámico -->
+            </div>
+
+            <div id="pending-modal-actions" class="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <!-- Botones dinámicos según rol -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Notificación Centrada (Estilo Visor Reserva) -->
+    <div id="notification-modal"
+        class="fixed inset-0 z-[130] hidden flex items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+        <div
+            class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 text-center transform transition-all">
+            <div id="notification-icon" class="mx-auto w-14 h-14 rounded-full mb-4 flex items-center justify-center">
+            </div>
+            <h3 id="notification-title" class="text-xl font-black text-slate-800 mb-2">Notificación</h3>
+            <p id="notification-message" class="text-sm text-slate-600 mb-6 font-medium whitespace-pre-line leading-relaxed">Mensaje aquí.</p>
+            <button onclick="closeNotification()"
+                class="w-full px-4 py-3 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm cursor-pointer">Entendido</button>
+        </div>
+    </div>
+
+    <!-- Carga de Scripts -->
+    <script src="config.js?v=4.2"></script>
+    <script src="utils.js?v=4.2"></script>
+    <script src="state.js?v=4.2"></script>
+    <script src="firebase-service.js?v=4.2"></script>
+    <script src="export.js?v=4.2"></script>
+    <script src="ui.js?v=4.2"></script>
+    <script src="app.js?v=4.2"></script>
+
+</body>
+</html>
