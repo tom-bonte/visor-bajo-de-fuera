@@ -813,8 +813,10 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
     // 1. Manejo del día de origen: reducir o eliminar
     const sourceSalidas = getDaySalidas(monthDaysCache[sourceDate], sourceDate);
     const sIndex = sourceSalidas.findIndex(s => s.id === salidaId || s.centerCode === normCode);
+    let sourceNote = '';
     if (sIndex !== -1) {
         const sourceSalida = sourceSalidas[sIndex];
+        sourceNote = (sourceSalida.note || '').trim();
         const currentP = Number(sourceSalida.plazas !== undefined ? sourceSalida.plazas : sourceSalida.pax) || 0;
         if (currentP > paxToMove) {
             // Split: mantener las plazas sobrantes en el día de origen
@@ -834,6 +836,7 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
     if (existTarget) {
         existTarget.plazas = (Number(existTarget.plazas !== undefined ? existTarget.plazas : existTarget.pax) || 0) + paxToMove;
         existTarget.pax = existTarget.plazas;
+        if (!existTarget.note && sourceNote) existTarget.note = sourceNote;
         existTarget.updatedAt = new Date().toISOString();
     } else {
         targetSalidas.push({
@@ -842,7 +845,7 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
             centerCode: normCode,
             plazas: paxToMove,
             pax: paxToMove,
-            note: (sourceSalida.note || '').trim(),
+            note: sourceNote,
             updatedAt: new Date().toISOString()
         });
     }
