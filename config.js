@@ -172,10 +172,9 @@ const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 's
 
 /**
  * Endpoint de webhook para notificaciones WhatsApp a través de Make.com
- * IMPORTANTE: Desactivado (null) para evitar envíos al grupo de aguas interiores.
- * Se configurará un webhook nuevo cuando se cree el grupo específico de Bajo de Fuera.
+ * Grupo de WhatsApp: Bajo de Fuera
  */
-const WHATSAPP_WEBHOOK_URL = null;
+const WHATSAPP_WEBHOOK_URL = "https://hook.eu1.make.com/ar6hrm603xyqs2g9b62v4h4at5fi6l4d";
 
 /**
  * Configuración de Firebase para reserva-marina-cdp.
