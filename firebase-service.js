@@ -79,11 +79,9 @@ function listenCurrentDay(dateStr) {
             currentDayData = {
                 id: dateStr,
                 date: dateStr,
-                totalQuota: DEFAULT_DAILY_CAP,
-                allocations: {},
-                transfers: [],
-                releases: [],
-                claims: []
+                totalQuota: getDayQuota(dateStr, null),
+                salidas: [],
+                allocations: {}
             };
         }
         monthDaysCache[dateStr] = currentDayData;
@@ -130,13 +128,6 @@ function listenMonthOverview(startDateOrYear, endDateOrMonth) {
         .onSnapshot((snapshot) => {
             snapshot.forEach(doc => {
                 const d = doc.data() || {};
-                // Limpieza automática si se coló la salida de prueba de 3 plazas de Islas Hormigas en 2026-09-03
-                if (doc.id === '2026-09-03' && d.allocations && d.allocations['H'] && d.allocations['H'].initialSlots === 3) {
-                    delete d.allocations['H'];
-                    db.collection(BDF_COLLECTIONS.DAYS).doc('2026-09-03').update({
-                        'allocations.H': firebase.firestore.FieldValue.delete()
-                    }).catch(console.error);
-                }
                 if (d.allocations && d.allocations['B']) {
                     if (!d.allocations['MD']) {
                         d.allocations['MD'] = d.allocations['B'];
@@ -226,9 +217,12 @@ function listenBdfRequests() {
             const reqs = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // Cesión directa es interacción de 1 paso: auto-ejecutar si hubiera alguna pendiente previa
+                // Cesión directa ya la ejecuta directamente el centro cedente en confirmCesionDirecta()
                 if (data.type === 'donation') {
-                    acceptBdfSpotTransfer({ id: doc.id, ...data }).catch(console.error);
+                    // Si existen documentos antiguos pendientes de donation en bdf_requests, limpiarlos una sola vez desde admin
+                    if (currentUserKey === 'admin') {
+                        db.collection(BDF_COLLECTIONS.REQUESTS).doc(doc.id).delete().catch(console.error);
+                    }
                     return;
                 }
                 reqs.push({ id: doc.id, ...data });
@@ -275,40 +269,137 @@ async function acceptBdfRequest(requestId) {
     } catch (err) {
         console.error("Error al aceptar solicitud:", err);
         showNotification('Error', 'Hubo un problema al procesar la solicitud: ' + err.message, true);
+        renderAll();
     }
 }
 
 /**
  * Acepta un intercambio propuesto (Swap) aplicando las fórmulas de split y retención (Section 5).
+ * Re-valida plazas y cupos antes de ejecutar; si cambiaron, descarta la propuesta.
  * @param {Object} req
  */
 async function acceptBdfSwap(req) {
-    const { id: requestId, dateA, salidaIdA, centerA, paxA, retainedPaxA = 0, dateB, salidaIdB, centerB, paxB, retainedPaxB = 0 } = req;
+    const { id: requestId, dateA, salidaIdA, centerA, dateB, salidaIdB, centerB } = req;
     await Promise.all([ensureDayInCache(dateA), ensureDayInCache(dateB)]);
 
-    const cAInfo = CENTERS[centerA] || { name: centerA, emoji: '⛵' };
-    const cBInfo = CENTERS[centerB] || { name: centerB, emoji: '⛵' };
+    const normA = normCenter(centerA);
+    const normB = normCenter(centerB);
+
+    const dayDataA = monthDaysCache[dateA] || null;
+    const summaryA = getDaySummary(dayDataA, dateA);
+    const maxQuotaA = getDayQuota(dateA, dayDataA);
+
+    const dayDataB = monthDaysCache[dateB] || null;
+    const summaryB = getDaySummary(dayDataB, dateB);
+    const maxQuotaB = getDayQuota(dateB, dayDataB);
+
+    const salidasA = getDaySalidas(dayDataA, dateA);
+    const salidasB = getDaySalidas(dayDataB, dateB);
+
+    const sA = salidasA.find(s => s.id === salidaIdA || normCenter(s.centerCode) === normA);
+    const sB = salidasB.find(s => s.id === salidaIdB || normCenter(s.centerCode) === normB);
+
+    // Si los barcos ya no existen, la propuesta no es válida
+    if (!sA || !sB) {
+        await db.collection(BDF_COLLECTIONS.REQUESTS).doc(requestId).delete().catch(console.error);
+        closeNotificationsModal();
+        showNotification(
+            'Propuesta No Válida',
+            'Las plazas o los cupos han cambiado desde que se envió esta propuesta. Pídele a la otra escuela que la proponga de nuevo.',
+            true
+        );
+        renderAll();
+        return;
+    }
+
+    // Si algún día supera el cupo máximo
+    if (summaryA.totalOccupied > maxQuotaA || summaryB.totalOccupied > maxQuotaB) {
+        await db.collection(BDF_COLLECTIONS.REQUESTS).doc(requestId).delete().catch(console.error);
+        closeNotificationsModal();
+        showNotification(
+            'Propuesta No Válida',
+            'Las plazas o los cupos han cambiado desde que se envió esta propuesta. Pídele a la otra escuela que la proponga de nuevo.',
+            true
+        );
+        renderAll();
+        return;
+    }
+
+    const currentPaxA = Number(sA.totalPlazas !== undefined ? sA.totalPlazas : (sA.plazas !== undefined ? sA.plazas : sA.pax)) || 0;
+    const currentPaxB = Number(sB.totalPlazas !== undefined ? sB.totalPlazas : (sB.plazas !== undefined ? sB.plazas : sB.pax)) || 0;
+
+    // Recalcular con las mismas fórmulas que initiateSwap():
+    const space_A = maxQuotaA - (summaryA.totalOccupied - currentPaxA);
+    const space_B = maxQuotaB - (summaryB.totalOccupied - currentPaxB);
+
+    // Si el swap está bloqueado (espacio <= 0)
+    if (space_A <= 0 || space_B <= 0) {
+        await db.collection(BDF_COLLECTIONS.REQUESTS).doc(requestId).delete().catch(console.error);
+        closeNotificationsModal();
+        showNotification(
+            'Propuesta No Válida',
+            'Las plazas o los cupos han cambiado desde que se envió esta propuesta. Pídele a la otra escuela que la proponga de nuevo.',
+            true
+        );
+        renderAll();
+        return;
+    }
+
+    const safe_A = Math.min(currentPaxA, space_B);
+    const safe_B = Math.min(currentPaxB, space_A);
+    const retained_A = currentPaxA - safe_A;
+    const retained_B = currentPaxB - safe_B;
+
+    const reqPaxA = parseInt(req.paxA, 10) || 0;
+    const reqRetainedA = parseInt(req.retainedPaxA, 10) || 0;
+    const reqPaxB = parseInt(req.paxB, 10) || 0;
+    const reqRetainedB = parseInt(req.retainedPaxB, 10) || 0;
+
+    const differs = (
+        safe_A !== reqPaxA ||
+        retained_A !== reqRetainedA ||
+        safe_B !== reqPaxB ||
+        retained_B !== reqRetainedB ||
+        (req.spaceA !== undefined && space_A !== req.spaceA) ||
+        (req.spaceB !== undefined && space_B !== req.spaceB)
+    );
+
+    if (differs) {
+        await db.collection(BDF_COLLECTIONS.REQUESTS).doc(requestId).delete().catch(console.error);
+        closeNotificationsModal();
+        showNotification(
+            'Propuesta No Válida',
+            'Las plazas o los cupos han cambiado desde que se envió esta propuesta. Pídele a la otra escuela que la proponga de nuevo.',
+            true
+        );
+        renderAll();
+        return;
+    }
+
+    const cAInfo = CENTERS[normA] || { name: normA, emoji: '⛵' };
+    const cBInfo = CENTERS[normB] || { name: normB, emoji: '⛵' };
     const dA = formatDateShort(parseDateT00(dateA));
     const dB = formatDateShort(parseDateT00(dateB));
 
-    // 1. Ejecutar swap con splits y retenciones atómicamente
-    await executeSwapSalidas(dateA, salidaIdA, centerA, paxA, retainedPaxA, dateB, salidaIdB, centerB, paxB, retainedPaxB);
+    // 1. Ejecutar swap con transacción atómica y esperar escritura
+    await executeSwapSalidas(dateA, salidaIdA, normA, safe_A, retained_A, dateB, salidaIdB, normB, safe_B, retained_B);
 
-    // 2. Eliminar la solicitud de la colección
+    // 2. Eliminar la solicitud de la colección SOLO DESPUÉS de que la escritura se complete con éxito
     await db.collection(BDF_COLLECTIONS.REQUESTS).doc(requestId).delete();
 
     // 3. Enviar aviso por WhatsApp (si no es admin) de fondo
     if (currentUserKey !== 'admin') {
-        const msg = `🤖 *AVISO AUTOMÁTICO*\n✅ *INTERCAMBIO ACEPTADO* - ${cAInfo.emoji} ${cAInfo.name} ↔️ ${cBInfo.emoji} ${cBInfo.name}\nSe ha completado el intercambio de fechas en Bajo de Fuera:\n• ${cAInfo.name}: pasa al ${dB} (${paxA} pl.)${retainedPaxA > 0 ? ` (mantiene ${retainedPaxA} pl. en el ${dA})` : ''}\n• ${cBInfo.name}: pasa al ${dA} (${paxB} pl.)${retainedPaxB > 0 ? ` (mantiene ${retainedPaxB} pl. en el ${dB})` : ''}`;
+        const msg = `🤖 *AVISO AUTOMÁTICO*\n✅ *INTERCAMBIO ACEPTADO* - ${cAInfo.emoji} ${cAInfo.name} ↔️ ${cBInfo.emoji} ${cBInfo.name}\nSe ha completado el intercambio de fechas en Bajo de Fuera:\n• ${cAInfo.name}: pasa al ${dB} (${safe_A} pl.)${retained_A > 0 ? ` (mantiene ${retained_A} pl. en el ${dA})` : ''}\n• ${cBInfo.name}: pasa al ${dA} (${safe_B} pl.)${retained_B > 0 ? ` (mantiene ${retained_B} pl. en el ${dB})` : ''}`;
         sendBdfWebhook(msg).catch(console.error);
     }
 
-    // 4. Actualizar interfaz
+    // 4. Actualizar interfaz y feedback de éxito
     closeNotificationsModal();
+    showToast('Intercambio Aceptado', `Completado el intercambio entre ${dA} y ${dB}.`);
 }
 
 /**
- * Acepta una transferencia de plazas (Petición o Cesión Directa - Sections 3 y 3.1).
+ * Acepta una transferencia de plazas (Petición - Sections 3 y 3.1).
  * Crea una salida NUEVA e independiente para el receptor, sin fusionar.
  * @param {Object} req
  */
@@ -318,18 +409,18 @@ async function acceptBdfSpotTransfer(req) {
     const spots = Number(requestedPax || pax || 0);
 
     const isDonation = req.type === 'donation';
-    const givingCenter = isDonation ? req.initiatorCenter : req.targetCenter;
-    const receivingCenter = isDonation ? req.targetCenter : req.initiatorCenter;
+    const givingCenter = normCenter(isDonation ? req.initiatorCenter : req.targetCenter);
+    const receivingCenter = normCenter(isDonation ? req.targetCenter : req.initiatorCenter);
     const givingSalidaId = req.givingSalidaId || req.targetSalidaId || null;
 
     const gInfo = CENTERS[givingCenter] || { name: givingCenter, emoji: '⛵' };
     const rInfo = CENTERS[receivingCenter] || { name: receivingCenter, emoji: '⛵' };
     const dStr = formatDateShort(parseDateT00(date));
 
-    // 1. Ejecutar transferencia atómica de salidas (Section 3 / 3.1)
+    // 1. Ejecutar transferencia atómica de salidas (Section 3 / 3.1) y esperar escritura
     await executeSpotTransferSalidas(date, givingSalidaId, givingCenter, receivingCenter, spots, (req.note || '').trim());
 
-    // 2. Eliminar la solicitud de Firestore
+    // 2. Eliminar la solicitud de Firestore SOLO DESPUÉS de que la escritura se complete con éxito
     await db.collection(BDF_COLLECTIONS.REQUESTS).doc(requestId).delete();
 
     // 3. Notificar por WhatsApp de fondo (si no es admin)
@@ -339,8 +430,9 @@ async function acceptBdfSpotTransfer(req) {
         sendBdfWebhook(msg).catch(console.error);
     }
 
-    // 4. Actualizar interfaz
+    // 4. Actualizar interfaz y feedback de éxito
     closeNotificationsModal();
+    showToast('Petición Aceptada', `Has transferido ${spots} plazas a ${rInfo.name}.`);
 }
 
 /**
@@ -632,7 +724,7 @@ function syncAllocationsFromSalidas(salidas) {
         if (!s || !s.centerCode) return;
         const p = Number(s.plazas !== undefined ? s.plazas : s.pax) || 0;
         if (p <= 0) return;
-        const normCode = (s.centerCode === 'B' || s.centerCode === 'MD') ? 'MD' : s.centerCode;
+        const normCode = normCenter(s.centerCode);
         if (!allocs[normCode]) {
             allocs[normCode] = { initialSlots: 0, slots: 0, note: s.note || '' };
         }
@@ -656,68 +748,71 @@ async function executeAddSalida(dateStr, centerCode, pax, note = '') {
     pax = parseInt(pax, 10);
     if (isNaN(pax) || pax <= 0) throw new Error("La cantidad de plazas debe ser mayor a 0");
 
-    await ensureDayInCache(dateStr);
+    const normCode = normCenter(centerCode);
+    const docRef = db.collection(BDF_COLLECTIONS.DAYS).doc(dateStr);
 
-    const normCode = (centerCode === 'B' || centerCode === 'MD') ? 'MD' : centerCode;
-    const dayCap = getDayQuota(dateStr, monthDaysCache[dateStr]);
-    const dayData = monthDaysCache[dateStr] || null;
-    const summary = getDaySummary(dayData, dateStr);
-    const remaining = Math.max(0, dayCap - summary.totalOccupied);
-    if (pax > remaining) {
-        throw new Error(`Cupo diario excedido: solo quedan ${remaining} plazas disponibles hoy (máximo ${dayCap} plazas/día).`);
-    }
+    let finalSalidas = [];
+    let finalCap = 0;
 
-    // 1. Obtener lista actual de registros de plazas del día
-    const currentSalidas = getDaySalidas(dayData, dateStr);
-    const existing = currentSalidas.find(s => s.centerCode === normCode);
+    await db.runTransaction(async (transaction) => {
+        const docSnap = await transaction.get(docRef);
+        const dayData = docSnap.exists ? docSnap.data() : null;
 
-    if (existing) {
-        // Principio aditivo: se suman al total de la escuela
-        existing.plazas = (Number(existing.plazas !== undefined ? existing.plazas : existing.pax) || 0) + pax;
-        existing.pax = existing.plazas;
-        if (note && note.trim()) existing.note = note.trim();
-        existing.updatedAt = new Date().toISOString();
-    } else {
-        currentSalidas.push({
-            id: `plazas_${dateStr}_${normCode}`,
+        const dayCap = getDayQuota(dateStr, dayData);
+        const summary = getDaySummary(dayData, dateStr);
+        const remaining = Math.max(0, dayCap - summary.totalOccupied);
+        if (pax > remaining) {
+            throw new Error(`Cupo diario excedido: solo quedan ${remaining} plazas disponibles hoy (máximo ${dayCap} plazas/día).`);
+        }
+
+        const currentSalidas = getDaySalidas(dayData, dateStr);
+        const existing = currentSalidas.find(s => normCenter(s.centerCode) === normCode);
+
+        if (existing) {
+            existing.centerCode = normCode;
+            existing.plazas = (Number(existing.plazas !== undefined ? existing.plazas : existing.pax) || 0) + pax;
+            existing.pax = existing.plazas;
+            if (note && note.trim()) existing.note = note.trim();
+            existing.updatedAt = new Date().toISOString();
+        } else {
+            currentSalidas.push({
+                id: `plazas_${dateStr}_${normCode}`,
+                date: dateStr,
+                centerCode: normCode,
+                plazas: pax,
+                pax: pax,
+                note: (note || '').trim(),
+                updatedAt: new Date().toISOString()
+            });
+        }
+
+        finalSalidas = currentSalidas;
+        finalCap = dayCap;
+
+        transaction.set(docRef, {
             date: dateStr,
-            centerCode: normCode,
-            plazas: pax,
-            pax: pax,
-            note: (note || '').trim(),
-            updatedAt: new Date().toISOString()
-        });
-    }
+            totalQuota: dayCap,
+            salidas: currentSalidas,
+            allocations: syncAllocationsFromSalidas(currentSalidas),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    });
 
-    // 2. Actualización optimista inmediata en memoria (0ms)
     if (!monthDaysCache[dateStr]) {
         monthDaysCache[dateStr] = {
             id: dateStr,
             date: dateStr,
-            totalQuota: dayCap,
-            salidas: currentSalidas,
-            allocations: syncAllocationsFromSalidas(currentSalidas)
+            totalQuota: finalCap,
+            salidas: finalSalidas,
+            allocations: syncAllocationsFromSalidas(finalSalidas)
         };
     } else {
-        monthDaysCache[dateStr].salidas = currentSalidas;
-        monthDaysCache[dateStr].allocations = syncAllocationsFromSalidas(currentSalidas);
+        monthDaysCache[dateStr].totalQuota = finalCap;
+        monthDaysCache[dateStr].salidas = finalSalidas;
+        monthDaysCache[dateStr].allocations = syncAllocationsFromSalidas(finalSalidas);
     }
     renderAll();
 
-    // 3. Guardado en Firestore en segundo plano
-    const docRef = db.collection(BDF_COLLECTIONS.DAYS).doc(dateStr);
-    docRef.set({
-        date: dateStr,
-        totalQuota: dayCap,
-        salidas: currentSalidas,
-        allocations: syncAllocationsFromSalidas(currentSalidas),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).catch(err => {
-        console.error("Error guardando salida en Firestore:", err);
-        showToast('Error', 'No se pudo guardar la salida en la nube.', true);
-    });
-
-    // 4. Auditoría en segundo plano (solo para centros, nunca para admin)
     if (currentUserKey !== 'admin') {
         logBdfHistory('add_salida', {
             date: dateStr,
@@ -740,65 +835,69 @@ async function executeEditSalida(dateStr, salidaId, newPax, newCenterCode = null
     newPax = parseInt(newPax, 10);
     if (isNaN(newPax) || newPax <= 0) throw new Error("La cantidad de plazas debe ser mayor a 0");
 
-    await ensureDayInCache(dateStr);
-
-    const dayCap = getDayQuota(dateStr, monthDaysCache[dateStr]);
-    const dayData = monthDaysCache[dateStr] || null;
-    const currentSalidas = getDaySalidas(dayData, dateStr);
-    const targetIdx = currentSalidas.findIndex(s => s.id === salidaId);
-    
-    // Si no la encuentra por ID, busca por centerCode como respaldo
-    const salidaIndex = targetIdx !== -1 ? targetIdx : currentSalidas.findIndex(s => s.centerCode === newCenterCode);
-    if (salidaIndex === -1) throw new Error("No se encontró el registro de plazas a modificar.");
-
-    const currentSalida = currentSalidas[salidaIndex];
-    const otherOccupied = currentSalidas.reduce((sum, s, idx) => {
-        if (idx === salidaIndex) return sum;
-        return sum + (Number(s.plazas !== undefined ? s.plazas : s.pax) || 0);
-    }, 0);
-    const maxAvailableForThis = Math.max(0, dayCap - otherOccupied);
-
-    if (newPax > maxAvailableForThis) {
-        throw new Error(`Cupo diario excedido: solo hay espacio para un máximo de ${maxAvailableForThis} plazas hoy (cupo diario: ${dayCap}).`);
-    }
-
-    const oldCenter = currentSalida.centerCode;
-    const targetCenter = newCenterCode || oldCenter;
-    const normCenter = (targetCenter === 'B' || targetCenter === 'MD') ? 'MD' : targetCenter;
-
-    // Actualizar registro con plazas y pax sincronizados
-    currentSalidas[salidaIndex] = {
-        ...currentSalida,
-        centerCode: normCenter,
-        plazas: newPax,
-        pax: newPax,
-        note: (newNote !== undefined ? newNote : currentSalida.note || '').trim(),
-        updatedAt: new Date().toISOString()
-    };
-
-    // 1. Actualización optimista inmediata en memoria (0ms)
-    monthDaysCache[dateStr].salidas = currentSalidas;
-    monthDaysCache[dateStr].allocations = syncAllocationsFromSalidas(currentSalidas);
-    renderAll();
-
-    // 2. Guardado no bloqueante en Firestore
     const docRef = db.collection(BDF_COLLECTIONS.DAYS).doc(dateStr);
-    docRef.set({
-        date: dateStr,
-        totalQuota: dayCap,
-        salidas: currentSalidas,
-        allocations: syncAllocationsFromSalidas(currentSalidas),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).catch(err => {
-        console.error("Error editando plazas:", err);
-        showToast('Error', 'No se pudo guardar la modificación.', true);
+    let finalSalidas = [];
+    let finalCap = 0;
+    let oldCenter = '';
+    let finalTarget = '';
+
+    await db.runTransaction(async (transaction) => {
+        const docSnap = await transaction.get(docRef);
+        const dayData = docSnap.exists ? docSnap.data() : null;
+
+        const dayCap = getDayQuota(dateStr, dayData);
+        const currentSalidas = getDaySalidas(dayData, dateStr);
+        const normNewCenter = newCenterCode ? normCenter(newCenterCode) : null;
+
+        const targetIdx = currentSalidas.findIndex(s => s.id === salidaId);
+        const salidaIndex = targetIdx !== -1 ? targetIdx : currentSalidas.findIndex(s => normCenter(s.centerCode) === normNewCenter);
+        if (salidaIndex === -1) throw new Error("No se encontró el registro de plazas a modificar.");
+
+        const currentSalida = currentSalidas[salidaIndex];
+        const otherOccupied = currentSalidas.reduce((sum, s, idx) => {
+            if (idx === salidaIndex) return sum;
+            return sum + (Number(s.plazas !== undefined ? s.plazas : s.pax) || 0);
+        }, 0);
+        const maxAvailableForThis = Math.max(0, dayCap - otherOccupied);
+
+        if (newPax > maxAvailableForThis) {
+            throw new Error(`Cupo diario excedido: solo hay espacio para un máximo de ${maxAvailableForThis} plazas hoy (cupo diario: ${dayCap}).`);
+        }
+
+        oldCenter = currentSalida.centerCode;
+        finalTarget = normNewCenter || normCenter(oldCenter);
+
+        currentSalidas[salidaIndex] = {
+            ...currentSalida,
+            centerCode: finalTarget,
+            plazas: newPax,
+            pax: newPax,
+            note: (newNote !== undefined ? newNote : currentSalida.note || '').trim(),
+            updatedAt: new Date().toISOString()
+        };
+
+        finalSalidas = currentSalidas;
+        finalCap = dayCap;
+
+        transaction.set(docRef, {
+            date: dateStr,
+            totalQuota: dayCap,
+            salidas: currentSalidas,
+            allocations: syncAllocationsFromSalidas(currentSalidas),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
     });
 
-    // 3. Auditoría en segundo plano (solo para centros, nunca para admin)
+    if (!monthDaysCache[dateStr]) monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: finalCap };
+    monthDaysCache[dateStr].totalQuota = finalCap;
+    monthDaysCache[dateStr].salidas = finalSalidas;
+    monthDaysCache[dateStr].allocations = syncAllocationsFromSalidas(finalSalidas);
+    renderAll();
+
     if (currentUserKey !== 'admin') {
         logBdfHistory('edit_salida', {
             date: dateStr,
-            center: normCenter,
+            center: finalTarget,
             oldCenter: oldCenter,
             slots: newPax,
             note: newNote
@@ -813,36 +912,39 @@ async function executeEditSalida(dateStr, salidaId, newPax, newCenterCode = null
  * @param {string} [centerCode]
  */
 async function executeDeleteSalida(dateStr, salidaId, centerCode = null) {
-    await ensureDayInCache(dateStr);
-    const dayData = monthDaysCache[dateStr] || null;
-    let currentSalidas = getDaySalidas(dayData, dateStr);
-
-    if (salidaId) {
-        currentSalidas = currentSalidas.filter(s => s.id !== salidaId);
-    } else if (centerCode) {
-        const norm = (centerCode === 'B' || centerCode === 'MD') ? 'MD' : centerCode;
-        currentSalidas = currentSalidas.filter(s => s.centerCode !== norm);
-    }
-
-    // 1. Actualización optimista inmediata
-    if (!monthDaysCache[dateStr]) monthDaysCache[dateStr] = { id: dateStr, date: dateStr };
-    monthDaysCache[dateStr].salidas = currentSalidas;
-    monthDaysCache[dateStr].allocations = syncAllocationsFromSalidas(currentSalidas);
-    renderAll();
-
-    // 2. Eliminación en Firestore en segundo plano
     const docRef = db.collection(BDF_COLLECTIONS.DAYS).doc(dateStr);
-    docRef.set({
-        date: dateStr,
-        salidas: currentSalidas,
-        allocations: syncAllocationsFromSalidas(currentSalidas),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).catch(err => {
-        console.error("Error eliminando plazas:", err);
-        showToast('Error', 'No se pudo eliminar de la nube.', true);
+    let finalSalidas = [];
+    let finalCap = 0;
+    const normCode = centerCode ? normCenter(centerCode) : null;
+
+    await db.runTransaction(async (transaction) => {
+        const docSnap = await transaction.get(docRef);
+        const dayData = docSnap.exists ? docSnap.data() : null;
+        const dayCap = getDayQuota(dateStr, dayData);
+
+        let currentSalidas = getDaySalidas(dayData, dateStr);
+        if (salidaId) {
+            currentSalidas = currentSalidas.filter(s => s.id !== salidaId);
+        } else if (normCode) {
+            currentSalidas = currentSalidas.filter(s => normCenter(s.centerCode) !== normCode);
+        }
+
+        finalSalidas = currentSalidas;
+        finalCap = dayCap;
+
+        transaction.set(docRef, {
+            date: dateStr,
+            salidas: currentSalidas,
+            allocations: syncAllocationsFromSalidas(currentSalidas),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
     });
 
-    // 3. Auditoría en segundo plano (solo para centros, nunca para admin)
+    if (!monthDaysCache[dateStr]) monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: finalCap };
+    monthDaysCache[dateStr].salidas = finalSalidas;
+    monthDaysCache[dateStr].allocations = syncAllocationsFromSalidas(finalSalidas);
+    renderAll();
+
     if (currentUserKey !== 'admin') {
         logBdfHistory('delete_salida', {
             date: dateStr,
@@ -853,8 +955,7 @@ async function executeDeleteSalida(dateStr, salidaId, centerCode = null) {
 
 /**
  * Mueve plazas de una escuela a otro día (Scenario 4A / 4B Opción 1).
- * Si es un movimiento parcial (split), reduce las plazas en el día origen y las añade
- * al total de la escuela en el día destino (principio aditivo de Section 0).
+ * Lee ambos días en una misma transacción Firestore antes de modificar.
  * @param {string} sourceDate
  * @param {string} targetDate
  * @param {string} salidaId
@@ -866,85 +967,109 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
     paxToMove = parseInt(paxToMove, 10);
     if (isNaN(paxToMove) || paxToMove <= 0) return;
 
-    await Promise.all([ensureDayInCache(sourceDate), ensureDayInCache(targetDate)]);
+    const normCode = normCenter(centerCode);
+    const sourceRef = db.collection(BDF_COLLECTIONS.DAYS).doc(sourceDate);
+    const targetRef = db.collection(BDF_COLLECTIONS.DAYS).doc(targetDate);
 
-    const normCode = (centerCode === 'B' || centerCode === 'MD') ? 'MD' : centerCode;
+    let finalSourceSalidas = [];
+    let finalTargetSalidas = [];
+    let finalSourceCap = 0;
+    let finalTargetCap = 0;
 
-    // 1. Manejo del día de origen: reducir o eliminar
-    const sourceSalidas = getDaySalidas(monthDaysCache[sourceDate], sourceDate);
-    const sIndex = sourceSalidas.findIndex(s => s.id === salidaId || s.centerCode === normCode);
-    let sourceNote = '';
-    if (sIndex !== -1) {
+    await db.runTransaction(async (transaction) => {
+        // Lectura de ambos documentos antes de cualquier escritura
+        const [sourceDoc, targetDoc] = await Promise.all([
+            transaction.get(sourceRef),
+            transaction.get(targetRef)
+        ]);
+
+        const sourceData = sourceDoc.exists ? sourceDoc.data() : null;
+        const targetData = targetDoc.exists ? targetDoc.data() : null;
+
+        const sourceCap = getDayQuota(sourceDate, sourceData);
+        const targetCap = getDayQuota(targetDate, targetData);
+
+        const sourceSalidas = getDaySalidas(sourceData, sourceDate);
+        const sIndex = sourceSalidas.findIndex(s => s.id === salidaId || normCenter(s.centerCode) === normCode);
+        if (sIndex === -1) throw new Error("No se encontró la salida en el día de origen.");
+
         const sourceSalida = sourceSalidas[sIndex];
-        sourceNote = (sourceSalida.note || '').trim();
+        const sourceNote = (sourceSalida.note || '').trim();
         const currentP = Number(sourceSalida.plazas !== undefined ? sourceSalida.plazas : sourceSalida.pax) || 0;
+        if (currentP < paxToMove) {
+            throw new Error(`Plazas insuficientes en el día de origen: tiene ${currentP} y pretendes mover ${paxToMove}.`);
+        }
+
+        // Re-comprobar cupo del día destino
+        const targetSalidas = getDaySalidas(targetData, targetDate);
+        const targetSummary = getDaySummary(targetData, targetDate);
+        const availableInTarget = Math.max(0, targetCap - targetSummary.totalOccupied);
+        if (paxToMove > availableInTarget) {
+            throw new Error(`Cupo diario excedido en destino: solo quedan ${availableInTarget} plazas disponibles en el día de destino.`);
+        }
+
+        // Modificar día de origen
         if (currentP > paxToMove) {
-            // Split: mantener las plazas sobrantes en el día de origen
             sourceSalida.plazas = currentP - paxToMove;
             sourceSalida.pax = sourceSalida.plazas;
             sourceSalida.updatedAt = new Date().toISOString();
         } else {
-            // Se mueven todas las plazas: eliminar la escuela del día de origen
             sourceSalidas.splice(sIndex, 1);
         }
-    }
 
-    // 2. Manejo del día de destino: principio aditivo (sumar al total existente o crear registro)
-    const targetCap = getDayQuota(targetDate, monthDaysCache[targetDate]);
-    const targetSalidas = getDaySalidas(monthDaysCache[targetDate], targetDate);
-    const existTarget = targetSalidas.find(s => s.centerCode === normCode);
-    if (existTarget) {
-        existTarget.plazas = (Number(existTarget.plazas !== undefined ? existTarget.plazas : existTarget.pax) || 0) + paxToMove;
-        existTarget.pax = existTarget.plazas;
-        if (!existTarget.note && sourceNote) existTarget.note = sourceNote;
-        existTarget.updatedAt = new Date().toISOString();
-    } else {
-        targetSalidas.push({
-            id: `plazas_${targetDate}_${normCode}`,
+        // Modificar día de destino
+        const existTarget = targetSalidas.find(s => normCenter(s.centerCode) === normCode);
+        if (existTarget) {
+            existTarget.plazas = (Number(existTarget.plazas !== undefined ? existTarget.plazas : existTarget.pax) || 0) + paxToMove;
+            existTarget.pax = existTarget.plazas;
+            if (!existTarget.note && sourceNote) existTarget.note = sourceNote;
+            existTarget.updatedAt = new Date().toISOString();
+        } else {
+            targetSalidas.push({
+                id: `plazas_${targetDate}_${normCode}`,
+                date: targetDate,
+                centerCode: normCode,
+                plazas: paxToMove,
+                pax: paxToMove,
+                note: sourceNote,
+                updatedAt: new Date().toISOString()
+            });
+        }
+
+        finalSourceSalidas = sourceSalidas;
+        finalTargetSalidas = targetSalidas;
+        finalSourceCap = sourceCap;
+        finalTargetCap = targetCap;
+
+        transaction.set(sourceRef, {
+            date: sourceDate,
+            totalQuota: sourceCap,
+            salidas: sourceSalidas,
+            allocations: syncAllocationsFromSalidas(sourceSalidas),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        transaction.set(targetRef, {
             date: targetDate,
-            centerCode: normCode,
-            plazas: paxToMove,
-            pax: paxToMove,
-            note: sourceNote,
-            updatedAt: new Date().toISOString()
-        });
-    }
+            totalQuota: targetCap,
+            salidas: targetSalidas,
+            allocations: syncAllocationsFromSalidas(targetSalidas),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    });
 
-    const sourceCap = getDayQuota(sourceDate, monthDaysCache[sourceDate]);
+    if (!monthDaysCache[sourceDate]) monthDaysCache[sourceDate] = { id: sourceDate, date: sourceDate, totalQuota: finalSourceCap };
+    monthDaysCache[sourceDate].totalQuota = finalSourceCap;
+    monthDaysCache[sourceDate].salidas = finalSourceSalidas;
+    monthDaysCache[sourceDate].allocations = syncAllocationsFromSalidas(finalSourceSalidas);
 
-    // 3. Actualización optimista en memoria (0ms)
-    if (!monthDaysCache[sourceDate]) monthDaysCache[sourceDate] = { id: sourceDate, date: sourceDate, totalQuota: sourceCap };
-    monthDaysCache[sourceDate].salidas = sourceSalidas;
-    monthDaysCache[sourceDate].allocations = syncAllocationsFromSalidas(sourceSalidas);
-
-    if (!monthDaysCache[targetDate]) monthDaysCache[targetDate] = { id: targetDate, date: targetDate, totalQuota: targetCap };
-    monthDaysCache[targetDate].salidas = targetSalidas;
-    monthDaysCache[targetDate].allocations = syncAllocationsFromSalidas(targetSalidas);
+    if (!monthDaysCache[targetDate]) monthDaysCache[targetDate] = { id: targetDate, date: targetDate, totalQuota: finalTargetCap };
+    monthDaysCache[targetDate].totalQuota = finalTargetCap;
+    monthDaysCache[targetDate].salidas = finalTargetSalidas;
+    monthDaysCache[targetDate].allocations = syncAllocationsFromSalidas(finalTargetSalidas);
 
     renderAll();
 
-    // 4. Guardado atómico en Firestore por Lote (Batch)
-    const batch = db.batch();
-    const sourceRef = db.collection(BDF_COLLECTIONS.DAYS).doc(sourceDate);
-    const targetRef = db.collection(BDF_COLLECTIONS.DAYS).doc(targetDate);
-
-    batch.set(sourceRef, {
-        date: sourceDate,
-        totalQuota: sourceCap,
-        salidas: sourceSalidas,
-        allocations: syncAllocationsFromSalidas(sourceSalidas)
-    }, { merge: true });
-
-    batch.set(targetRef, {
-        date: targetDate,
-        totalQuota: targetCap,
-        salidas: targetSalidas,
-        allocations: syncAllocationsFromSalidas(targetSalidas)
-    }, { merge: true });
-
-    await batch.commit();
-
-    // 5. Auditoría (solo para centros, nunca para admin)
     if (currentUserKey !== 'admin') {
         logBdfHistory('move_salida', {
             from: sourceDate,
@@ -959,6 +1084,7 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
  * Ejecuta el intercambio de fechas entre dos escuelas con soporte de split asimétrico (Section 5).
  * Las plazas retained se mantienen en sus días de origen como total activo.
  * En los días de destino, las plazas se SUMAN al total de la escuela si ya tenía plazas (principio aditivo).
+ * Lee y escribe ambos días en una misma transacción Firestore.
  */
 async function executeSwapSalidas(dateA, salidaIdA, centerA, safePaxA, retainedPaxA, dateB, salidaIdB, centerB, safePaxB, retainedPaxB) {
     safePaxA = parseInt(safePaxA, 10) || 0;
@@ -966,116 +1092,143 @@ async function executeSwapSalidas(dateA, salidaIdA, centerA, safePaxA, retainedP
     retainedPaxA = parseInt(retainedPaxA, 10) || 0;
     retainedPaxB = parseInt(retainedPaxB, 10) || 0;
 
-    await Promise.all([ensureDayInCache(dateA), ensureDayInCache(dateB)]);
+    const normA = normCenter(centerA);
+    const normB = normCenter(centerB);
 
-    const normA = (centerA === 'B' || centerA === 'MD') ? 'MD' : centerA;
-    const normB = (centerB === 'B' || centerB === 'MD') ? 'MD' : centerB;
-
-    const salidasA = getDaySalidas(monthDaysCache[dateA], dateA);
-    const salidasB = getDaySalidas(monthDaysCache[dateB], dateB);
-
-    // 1. Ajustar Escuela A en Día A
-    const idxA = salidasA.findIndex(s => s.centerCode === normA || s.id === salidaIdA);
-    if (idxA !== -1) {
-        if (retainedPaxA > 0) {
-            salidasA[idxA].plazas = retainedPaxA;
-            salidasA[idxA].pax = retainedPaxA;
-            salidasA[idxA].updatedAt = new Date().toISOString();
-        } else {
-            salidasA.splice(idxA, 1);
-        }
-    }
-
-    // Llegada de Escuela B a Día A (safePaxB plazas)
-    if (safePaxB > 0) {
-        const existBInA = salidasA.find(s => s.centerCode === normB);
-        if (existBInA) {
-            existBInA.plazas = (Number(existBInA.plazas !== undefined ? existBInA.plazas : existBInA.pax) || 0) + safePaxB;
-            existBInA.pax = existBInA.plazas;
-            existBInA.updatedAt = new Date().toISOString();
-        } else {
-            salidasA.push({
-                id: `plazas_${dateA}_${normB}`,
-                date: dateA,
-                centerCode: normB,
-                plazas: safePaxB,
-                pax: safePaxB,
-                note: '',
-                updatedAt: new Date().toISOString()
-            });
-        }
-    }
-
-    // 2. Ajustar Escuela B en Día B
-    const idxB = salidasB.findIndex(s => s.centerCode === normB || s.id === salidaIdB);
-    if (idxB !== -1) {
-        if (retainedPaxB > 0) {
-            salidasB[idxB].plazas = retainedPaxB;
-            salidasB[idxB].pax = retainedPaxB;
-            salidasB[idxB].updatedAt = new Date().toISOString();
-        } else {
-            salidasB.splice(idxB, 1);
-        }
-    }
-
-    // Llegada de Escuela A a Día B (safePaxA plazas)
-    if (safePaxA > 0) {
-        const existAInB = salidasB.find(s => s.centerCode === normA);
-        if (existAInB) {
-            existAInB.plazas = (Number(existAInB.plazas !== undefined ? existAInB.plazas : existAInB.pax) || 0) + safePaxA;
-            existAInB.pax = existAInB.plazas;
-            existAInB.updatedAt = new Date().toISOString();
-        } else {
-            salidasB.push({
-                id: `plazas_${dateB}_${normA}`,
-                date: dateB,
-                centerCode: normA,
-                plazas: safePaxA,
-                pax: safePaxA,
-                note: '',
-                updatedAt: new Date().toISOString()
-            });
-        }
-    }
-
-    const dayCapA = getDayQuota(dateA, monthDaysCache[dateA]);
-    const dayCapB = getDayQuota(dateB, monthDaysCache[dateB]);
-
-    // 3. Actualización optimista en memoria (0ms)
-    if (!monthDaysCache[dateA]) monthDaysCache[dateA] = { id: dateA, date: dateA, totalQuota: dayCapA };
-    monthDaysCache[dateA].salidas = salidasA;
-    monthDaysCache[dateA].allocations = syncAllocationsFromSalidas(salidasA);
-
-    if (!monthDaysCache[dateB]) monthDaysCache[dateB] = { id: dateB, date: dateB, totalQuota: dayCapB };
-    monthDaysCache[dateB].salidas = salidasB;
-    monthDaysCache[dateB].allocations = syncAllocationsFromSalidas(salidasB);
-
-    renderAll();
-
-    // 4. Escritura atómica en Firestore
-    const batch = db.batch();
     const docRefA = db.collection(BDF_COLLECTIONS.DAYS).doc(dateA);
     const docRefB = db.collection(BDF_COLLECTIONS.DAYS).doc(dateB);
 
-    batch.set(docRefA, {
-        date: dateA,
-        totalQuota: dayCapA,
-        salidas: salidasA,
-        allocations: syncAllocationsFromSalidas(salidasA),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    let finalSalidasA = [];
+    let finalSalidasB = [];
+    let finalCapA = 0;
+    let finalCapB = 0;
 
-    batch.set(docRefB, {
-        date: dateB,
-        totalQuota: dayCapB,
-        salidas: salidasB,
-        allocations: syncAllocationsFromSalidas(salidasB),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    await db.runTransaction(async (transaction) => {
+        // Lectura de ambos documentos dentro de la transacción
+        const [docSnapA, docSnapB] = await Promise.all([
+            transaction.get(docRefA),
+            transaction.get(docRefB)
+        ]);
 
-    batch.commit().catch(err => console.error("Error guardando intercambio en Firestore:", err));
+        const dayDataA = docSnapA.exists ? docSnapA.data() : null;
+        const dayDataB = docSnapB.exists ? docSnapB.data() : null;
 
-    // 5. Auditoría (solo para centros, nunca para admin)
+        const dayCapA = getDayQuota(dateA, dayDataA);
+        const dayCapB = getDayQuota(dateB, dayDataB);
+
+        const salidasA = getDaySalidas(dayDataA, dateA);
+        const salidasB = getDaySalidas(dayDataB, dateB);
+
+        // 1. Ajustar Escuela A en Día A
+        const idxA = salidasA.findIndex(s => normCenter(s.centerCode) === normA || s.id === salidaIdA);
+        if (idxA !== -1) {
+            if (retainedPaxA > 0) {
+                salidasA[idxA].plazas = retainedPaxA;
+                salidasA[idxA].pax = retainedPaxA;
+                salidasA[idxA].updatedAt = new Date().toISOString();
+            } else {
+                salidasA.splice(idxA, 1);
+            }
+        }
+
+        // Llegada de Escuela B a Día A (safePaxB plazas)
+        if (safePaxB > 0) {
+            const existBInA = salidasA.find(s => normCenter(s.centerCode) === normB);
+            if (existBInA) {
+                existBInA.plazas = (Number(existBInA.plazas !== undefined ? existBInA.plazas : existBInA.pax) || 0) + safePaxB;
+                existBInA.pax = existBInA.plazas;
+                existBInA.updatedAt = new Date().toISOString();
+            } else {
+                salidasA.push({
+                    id: `plazas_${dateA}_${normB}`,
+                    date: dateA,
+                    centerCode: normB,
+                    plazas: safePaxB,
+                    pax: safePaxB,
+                    note: '',
+                    updatedAt: new Date().toISOString()
+                });
+            }
+        }
+
+        // 2. Ajustar Escuela B en Día B
+        const idxB = salidasB.findIndex(s => normCenter(s.centerCode) === normB || s.id === salidaIdB);
+        if (idxB !== -1) {
+            if (retainedPaxB > 0) {
+                salidasB[idxB].plazas = retainedPaxB;
+                salidasB[idxB].pax = retainedPaxB;
+                salidasB[idxB].updatedAt = new Date().toISOString();
+            } else {
+                salidasB.splice(idxB, 1);
+            }
+        }
+
+        // Llegada de Escuela A a Día B (safePaxA plazas)
+        if (safePaxA > 0) {
+            const existAInB = salidasB.find(s => normCenter(s.centerCode) === normA);
+            if (existAInB) {
+                existAInB.plazas = (Number(existAInB.plazas !== undefined ? existAInB.plazas : existAInB.pax) || 0) + safePaxA;
+                existAInB.pax = existAInB.plazas;
+                existAInB.updatedAt = new Date().toISOString();
+            } else {
+                salidasB.push({
+                    id: `plazas_${dateB}_${normA}`,
+                    date: dateB,
+                    centerCode: normA,
+                    plazas: safePaxA,
+                    pax: safePaxA,
+                    note: '',
+                    updatedAt: new Date().toISOString()
+                });
+            }
+        }
+
+        // Comprobación de cupos en ambos días
+        const occA = salidasA.reduce((sum, s) => sum + (Number(s.plazas !== undefined ? s.plazas : s.pax) || 0), 0);
+        const occB = salidasB.reduce((sum, s) => sum + (Number(s.plazas !== undefined ? s.plazas : s.pax) || 0), 0);
+
+        if (occA > dayCapA) {
+            throw new Error(`Cupo diario excedido en ${dateA}: total ocupado (${occA}) supera el límite de ${dayCapA}.`);
+        }
+        if (occB > dayCapB) {
+            throw new Error(`Cupo diario excedido en ${dateB}: total ocupado (${occB}) supera el límite de ${dayCapB}.`);
+        }
+
+        finalSalidasA = salidasA;
+        finalSalidasB = salidasB;
+        finalCapA = dayCapA;
+        finalCapB = dayCapB;
+
+        transaction.set(docRefA, {
+            date: dateA,
+            totalQuota: dayCapA,
+            salidas: salidasA,
+            allocations: syncAllocationsFromSalidas(salidasA),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        transaction.set(docRefB, {
+            date: dateB,
+            totalQuota: dayCapB,
+            salidas: salidasB,
+            allocations: syncAllocationsFromSalidas(salidasB),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    });
+
+    // Actualización de cache y renderizado
+    if (!monthDaysCache[dateA]) monthDaysCache[dateA] = { id: dateA, date: dateA, totalQuota: finalCapA };
+    monthDaysCache[dateA].totalQuota = finalCapA;
+    monthDaysCache[dateA].salidas = finalSalidasA;
+    monthDaysCache[dateA].allocations = syncAllocationsFromSalidas(finalSalidasA);
+
+    if (!monthDaysCache[dateB]) monthDaysCache[dateB] = { id: dateB, date: dateB, totalQuota: finalCapB };
+    monthDaysCache[dateB].totalQuota = finalCapB;
+    monthDaysCache[dateB].salidas = finalSalidasB;
+    monthDaysCache[dateB].allocations = syncAllocationsFromSalidas(finalSalidasB);
+
+    renderAll();
+
     if (currentUserKey !== 'admin') {
         logBdfHistory('swap_salidas', {
             dateA, dateB, centerA: normA, centerB: normB, safePaxA, retainedPaxA, safePaxB, retainedPaxB
@@ -1092,70 +1245,73 @@ async function executeSpotTransferSalidas(dateStr, givingSalidaId, fromCenter, t
     spots = parseInt(spots, 10);
     if (isNaN(spots) || spots <= 0) throw new Error("La cantidad de plazas debe ser mayor a 0");
 
-    await ensureDayInCache(dateStr);
-
-    const normFrom = (fromCenter === 'B' || fromCenter === 'MD') ? 'MD' : fromCenter;
-    const normTo = (toCenter === 'B' || toCenter === 'MD') ? 'MD' : toCenter;
-
-    const currentSalidas = getDaySalidas(monthDaysCache[dateStr], dateStr);
-    const sIndex = currentSalidas.findIndex(s => s.centerCode === normFrom || s.id === givingSalidaId);
-    if (sIndex === -1) throw new Error("No se encontró la escuela que cede las plazas.");
-
-    const givingSalida = currentSalidas[sIndex];
-    const currentFromPlazas = Number(givingSalida.plazas !== undefined ? givingSalida.plazas : givingSalida.pax) || 0;
-    if (currentFromPlazas < spots) {
-        throw new Error(`Plazas insuficientes en la escuela: tiene ${currentFromPlazas} y pretendes transferir ${spots}.`);
-    }
-
-    // 1. Reducir plazas de la escuela cedente (o eliminarla si llega a 0)
-    if (currentFromPlazas > spots) {
-        givingSalida.plazas = currentFromPlazas - spots;
-        givingSalida.pax = givingSalida.plazas;
-        givingSalida.updatedAt = new Date().toISOString();
-    } else {
-        currentSalidas.splice(sIndex, 1);
-    }
-
-    // 2. Sumar al total de la escuela receptora si ya existe, o crear nuevo registro si no
-    const existTo = currentSalidas.find(s => s.centerCode === normTo);
-    if (existTo) {
-        existTo.plazas = (Number(existTo.plazas !== undefined ? existTo.plazas : existTo.pax) || 0) + spots;
-        existTo.pax = existTo.plazas;
-        existTo.updatedAt = new Date().toISOString();
-    } else {
-        currentSalidas.push({
-            id: `plazas_${dateStr}_${normTo}`,
-            date: dateStr,
-            centerCode: normTo,
-            plazas: spots,
-            pax: spots,
-            note: (note || '').trim(),
-            updatedAt: new Date().toISOString()
-        });
-    }
-
-    const dayCap = getDayQuota(dateStr, monthDaysCache[dateStr]);
-
-    // 3. Actualización optimista en memoria (0ms)
-    if (!monthDaysCache[dateStr]) monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: dayCap };
-    monthDaysCache[dateStr].salidas = currentSalidas;
-    monthDaysCache[dateStr].allocations = syncAllocationsFromSalidas(currentSalidas);
-    renderAll();
-
-    // 4. Guardado en Firestore en segundo plano
+    const normFrom = normCenter(fromCenter);
+    const normTo = normCenter(toCenter);
     const docRef = db.collection(BDF_COLLECTIONS.DAYS).doc(dateStr);
-    docRef.set({
-        date: dateStr,
-        totalQuota: dayCap,
-        salidas: currentSalidas,
-        allocations: syncAllocationsFromSalidas(currentSalidas),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).catch(err => {
-        console.error("Error guardando cesión de plazas en Firestore:", err);
-        showToast('Error', 'No se pudo guardar la transferencia en la nube.', true);
+
+    let finalSalidas = [];
+    let finalCap = 0;
+
+    await db.runTransaction(async (transaction) => {
+        const docSnap = await transaction.get(docRef);
+        const dayData = docSnap.exists ? docSnap.data() : null;
+        const dayCap = getDayQuota(dateStr, dayData);
+
+        const currentSalidas = getDaySalidas(dayData, dateStr);
+        const sIndex = currentSalidas.findIndex(s => normCenter(s.centerCode) === normFrom || s.id === givingSalidaId);
+        if (sIndex === -1) throw new Error("No se encontró la escuela que cede las plazas.");
+
+        const givingSalida = currentSalidas[sIndex];
+        const currentFromPlazas = Number(givingSalida.plazas !== undefined ? givingSalida.plazas : givingSalida.pax) || 0;
+        if (currentFromPlazas < spots) {
+            throw new Error(`Plazas insuficientes en la escuela: tiene ${currentFromPlazas} y pretendes transferir ${spots}.`);
+        }
+
+        // 1. Reducir plazas de la escuela cedente (o eliminarla si llega a 0)
+        if (currentFromPlazas > spots) {
+            givingSalida.plazas = currentFromPlazas - spots;
+            givingSalida.pax = givingSalida.plazas;
+            givingSalida.updatedAt = new Date().toISOString();
+        } else {
+            currentSalidas.splice(sIndex, 1);
+        }
+
+        // 2. Sumar al total de la escuela receptora si ya existe, o crear nuevo registro si no
+        const existTo = currentSalidas.find(s => normCenter(s.centerCode) === normTo);
+        if (existTo) {
+            existTo.plazas = (Number(existTo.plazas !== undefined ? existTo.plazas : existTo.pax) || 0) + spots;
+            existTo.pax = existTo.plazas;
+            existTo.updatedAt = new Date().toISOString();
+        } else {
+            currentSalidas.push({
+                id: `plazas_${dateStr}_${normTo}`,
+                date: dateStr,
+                centerCode: normTo,
+                plazas: spots,
+                pax: spots,
+                note: (note || '').trim(),
+                updatedAt: new Date().toISOString()
+            });
+        }
+
+        finalSalidas = currentSalidas;
+        finalCap = dayCap;
+
+        transaction.set(docRef, {
+            date: dateStr,
+            totalQuota: dayCap,
+            salidas: currentSalidas,
+            allocations: syncAllocationsFromSalidas(currentSalidas),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
     });
 
-    // 5. Auditoría en segundo plano (solo para centros)
+    if (!monthDaysCache[dateStr]) monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: finalCap };
+    monthDaysCache[dateStr].totalQuota = finalCap;
+    monthDaysCache[dateStr].salidas = finalSalidas;
+    monthDaysCache[dateStr].allocations = syncAllocationsFromSalidas(finalSalidas);
+    renderAll();
+
     if (currentUserKey !== 'admin') {
         logBdfHistory('transfer_salida', {
             date: dateStr,
@@ -1228,7 +1384,7 @@ async function executeImportCsvSchedule(daysMap, overwrite = true, salidasMap = 
                 finalSalidas = salidasMap[dateStr].map(s => ({
                     id: s.id || `plazas_${dateStr}_${s.centerCode}`,
                     date: dateStr,
-                    centerCode: (s.centerCode === 'B' || s.centerCode === 'MD') ? 'MD' : s.centerCode,
+                    centerCode: normCenter(s.centerCode),
                     plazas: Number(s.plazas !== undefined ? s.plazas : s.pax) || 0,
                     pax: Number(s.plazas !== undefined ? s.plazas : s.pax) || 0,
                     note: s.note || '',
@@ -1237,7 +1393,7 @@ async function executeImportCsvSchedule(daysMap, overwrite = true, salidasMap = 
             } else if (finalAllocations) {
                 finalSalidas = Object.keys(finalAllocations).map(code => {
                     const p = Number(finalAllocations[code].initialSlots || finalAllocations[code].slots || 10);
-                    const normCode = (code === 'B' || code === 'MD') ? 'MD' : code;
+                    const normCode = normCenter(code);
                     return {
                         id: `plazas_${dateStr}_${normCode}`,
                         date: dateStr,

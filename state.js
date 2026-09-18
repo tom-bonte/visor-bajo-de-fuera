@@ -17,7 +17,7 @@ let currentMonth = (currentDate.getFullYear() === 2026) ? currentDate.getMonth()
 /** Estado de acordeones de años en la barra lateral ('2026' => boolean). */
 let expandedYears = { 2026: true };
 
-/** Modo de visualización activo: 'mensual' | 'semanal' | 'estadisticas' | 'historial'. */
+/** Modo de visualización activo: 'mensual' | 'estadisticas' | 'historial'. */
 let activeViewMode = 'mensual';
 
 /** Conjunto de códigos de centros activos en el filtro (por defecto todos). */
@@ -59,6 +59,7 @@ let historyCenterFilter = 'all';
  * @param {Object} dayData
  */
 function getCenterBalance(centerCode, dayData) {
+    const normTarget = normCenter(centerCode);
     if (!dayData) {
         return {
             centerCode,
@@ -71,13 +72,29 @@ function getCenterBalance(centerCode, dayData) {
         };
     }
 
+    // Si ya dispone del modelo consolidado de salidas (Section 0)
+    if (Array.isArray(dayData.salidas)) {
+        const salidas = getDaySalidas(dayData, dayData.date || '');
+        const mySalida = salidas.find(s => normCenter(s.centerCode) === normTarget);
+        const slots = mySalida ? (Number(mySalida.plazas !== undefined ? mySalida.plazas : mySalida.pax) || 0) : 0;
+        return {
+            centerCode,
+            initialSlots: slots,
+            transferredOut: 0,
+            transferredIn: 0,
+            releasedToPool: 0,
+            claimedFromPool: 0,
+            effectiveSlots: Math.max(0, slots)
+        };
+    }
+
     const allocations = dayData.allocations || {};
     let initialSlots = (allocations[centerCode] && allocations[centerCode].initialSlots) || 0;
     if (initialSlots === 0 && centerCode === 'MD' && allocations['B']) {
         initialSlots = allocations['B'].initialSlots || 0;
     }
 
-    const isMatch = c => c === centerCode || (centerCode === 'MD' && c === 'B');
+    const isMatch = c => normCenter(c) === normTarget;
 
     const transfers = dayData.transfers || [];
     let transferredOut = 0;
@@ -146,7 +163,7 @@ function getDaySalidas(dayData, dateStr = '') {
     if (Array.isArray(dayData.salidas)) {
         dayData.salidas.forEach(s => {
             const rawCode = s.centerCode || s.center;
-            const normCode = (rawCode === 'B' || rawCode === 'MD') ? 'MD' : rawCode;
+            const normCode = normCenter(rawCode);
             if (!normCode) return;
             const p = Number(s.plazas !== undefined ? s.plazas : s.pax) || 0;
             if (p <= 0) return;
@@ -173,7 +190,7 @@ function getDaySalidas(dayData, dateStr = '') {
             const item = dayData.allocations[code];
             const p = Number(item?.initialSlots) || 0;
             if (p > 0) {
-                const normCode = (code === 'B' || code === 'MD') ? 'MD' : code;
+                const normCode = normCenter(code);
                 const cleanNote = sanitizeUserNote(item.note);
                 if (!byCenter[normCode]) {
                     byCenter[normCode] = {
@@ -224,7 +241,7 @@ function getSchoolDisplayBoxes(schoolRecord) {
  */
 function getPendingRequestForSalida(salidaId, dateStr = '', centerCode = '') {
     if (!bdfRequests || bdfRequests.length === 0) return null;
-    const normCode = centerCode === 'B' ? 'MD' : centerCode;
+    const normCode = normCenter(centerCode);
     
     return bdfRequests.find(r => {
         if (r.status !== 'pending') return false;

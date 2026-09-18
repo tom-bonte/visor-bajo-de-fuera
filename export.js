@@ -101,7 +101,7 @@ async function backupAllToCSV() {
             const daySalidas = getDaySalidas(day, day.date);
             if (daySalidas && daySalidas.length > 0) {
                 daySalidas.forEach(s => {
-                    const normCode = s.centerCode === 'B' ? 'MD' : s.centerCode;
+                    const normCode = normCenter(s.centerCode);
                     const cName = CENTERS[normCode]?.name || normCode;
                     csv += `${day.date},${cName},${s.pax}\n`;
                 });
@@ -185,7 +185,7 @@ async function executePrintCSV() {
         const daySalidas = getDaySalidas(day, day.date);
         if (daySalidas && daySalidas.length > 0) {
             daySalidas.forEach(s => {
-                const normCode = s.centerCode === 'B' ? 'MD' : s.centerCode;
+                const normCode = normCenter(s.centerCode);
                 if (centersToCheck.includes(normCode)) {
                     rows.push({
                         date: day.date,

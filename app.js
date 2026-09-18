@@ -92,25 +92,15 @@ function openHelpModal() {
  * @returns {{ startStr: string, endStr: string }}
  */
 function getVisibleDateRange() {
-    if (activeViewMode === 'semanal') {
-        if (!currentDate || isNaN(currentDate.getTime())) {
-            currentDate = new Date(currentYear, currentMonth, 14);
-        }
-        const monday = getMonday(currentDate);
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        return { startStr: getStrYMD(monday), endStr: getStrYMD(sunday) };
-    } else {
-        const firstDay = new Date(currentYear, currentMonth, 1);
-        let startDow = firstDay.getDay() - 1;
-        if (startDow === -1) startDow = 6;
-        const firstVis = new Date(currentYear, currentMonth, 1 - startDow);
-        const lastDay = new Date(currentYear, currentMonth + 1, 0);
-        const total = startDow + lastDay.getDate();
-        const rem = (7 - (total % 7)) % 7;
-        const lastVis = new Date(currentYear, currentMonth, lastDay.getDate() + rem);
-        return { startStr: getStrYMD(firstVis), endStr: getStrYMD(lastVis) };
-    }
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    let startDow = firstDay.getDay() - 1;
+    if (startDow === -1) startDow = 6;
+    const firstVis = new Date(currentYear, currentMonth, 1 - startDow);
+    const lastDay = new Date(currentYear, currentMonth + 1, 0);
+    const total = startDow + lastDay.getDate();
+    const rem = (7 - (total % 7)) % 7;
+    const lastVis = new Date(currentYear, currentMonth, lastDay.getDate() + rem);
+    return { startStr: getStrYMD(firstVis), endStr: getStrYMD(lastVis) };
 }
 
 /**
@@ -123,9 +113,6 @@ function refreshRangeListener() {
 
 function switchView(mode) {
     activeViewMode = mode;
-    if (mode === 'semanal' && (!currentDate || isNaN(currentDate.getTime()))) {
-        currentDate = new Date(currentYear, currentMonth, 14);
-    }
     refreshRangeListener();
     renderAll();
 }
@@ -139,7 +126,9 @@ function selectMonth(m, y = 2026) {
     currentMonth = m;
     currentYear = y;
     currentDate = new Date(currentYear, currentMonth, 1);
-    activeViewMode = 'mensual'; // Salir automáticamente de estadísticas o historial y mostrar el mes seleccionado
+    if (activeViewMode === 'historial') {
+        activeViewMode = 'mensual';
+    }
     refreshRangeListener();
     renderAll();
 }
@@ -155,29 +144,6 @@ function changeMonth(delta) {
     }
 
     currentDate = new Date(currentYear, currentMonth, 1);
-    refreshRangeListener();
-    renderAll();
-}
-
-function changeWeek(delta) {
-    if (!currentDate || isNaN(currentDate.getTime())) {
-        currentDate = new Date(currentYear, currentMonth, 14);
-    }
-    const newD = new Date(currentDate);
-    newD.setDate(newD.getDate() + (delta * 7));
-    currentDate = newD;
-
-    currentMonth = currentDate.getMonth();
-    currentYear = currentDate.getFullYear();
-    refreshRangeListener();
-    renderAll();
-}
-
-function goToCurrentWeek() {
-    const now = new Date();
-    currentYear = 2026;
-    currentMonth = (now.getFullYear() === 2026) ? now.getMonth() : 8;
-    currentDate = new Date(currentYear, currentMonth, (now.getFullYear() === 2026) ? now.getDate() : 14);
     refreshRangeListener();
     renderAll();
 }
@@ -369,17 +335,28 @@ function confirmNewSalida() {
     // Para el Administrador: NO pedir confirmación y NO enviar a WhatsApp
     if (currentUserKey === 'admin') {
         executeAddSalida(date, centerCode, pax)
+            .then(() => {
+                showToast('Salida añadida', `Añadidas ${pax} plazas para ${centerInfo.name}.`);
+            })
             .catch(err => {
-                showToast('Error', err.message, true);
+                showNotification('Error', err.message, true);
+                renderAll();
             });
         return;
     }
-    1
+
     const msg = `🤖 *AVISO AUTOMÁTICO*\n➕ *NUEVA SALIDA* - ${centerInfo.emoji} ${centerInfo.name}\nPara el ${dObj.getDate()} de ${MONTHS_ES[dObj.getMonth()].toUpperCase()}, añadió una salida a *Bajo de Fuera* de ${pax} plazas.`;
 
     triggerWhatsAppConfirm("Nueva Salida", msg, async () => {
-        await executeAddSalida(date, centerCode, pax);
-        sendBdfWebhook(msg).catch(console.error);
+        try {
+            await executeAddSalida(date, centerCode, pax);
+            sendBdfWebhook(msg).catch(console.error);
+            showToast('Salida añadida', `Añadidas ${pax} plazas para ${centerInfo.name}.`);
+        } catch (err) {
+            console.error("Error añadiendo salida:", err);
+            showNotification('Error', err.message, true);
+            renderAll();
+        }
     });
 }
 
@@ -407,7 +384,7 @@ function handleDayDoubleClick(dateStr) {
  */
 function handleBoatClick(e, dateStr, salidaId, centerCode) {
     const reqId = e?.currentTarget?.dataset?.pendingRequestId || e?.target?.closest?.('[data-pending-request-id]')?.dataset?.pendingRequestId;
-    const normCode = centerCode === 'B' ? 'MD' : centerCode;
+    const normCode = normCenter(centerCode);
     const pendingReq = reqId ? bdfRequests.find(r => r.id === reqId && r.status === 'pending') : getPendingRequestForSalida(salidaId, dateStr, normCode);
 
     if (pendingReq) {
@@ -433,7 +410,7 @@ function handleBoatDoubleClick(e, dateStr, salidaId, centerCode) {
         return;
     }
 
-    const normCode = centerCode === 'B' ? 'MD' : centerCode;
+    const normCode = normCenter(centerCode);
     const myCenterCode = USER_CENTER_KEYS[currentUserKey] || null;
     const isOwnOrAdmin = currentUserKey === 'admin' || normCode === myCenterCode;
 
@@ -468,8 +445,8 @@ function handleBoatDoubleClick(e, dateStr, salidaId, centerCode) {
 function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
     const myCenterCode = USER_CENTER_KEYS[currentUserKey] || null;
     const isAdmin = currentUserKey === 'admin';
-    const isInitiator = !isAdmin && (pendingReq.initiatorCenter === myCenterCode || (myCenterCode === 'MD' && pendingReq.initiatorCenter === 'B'));
-    const isTarget = !isAdmin && (pendingReq.targetCenter === myCenterCode || (myCenterCode === 'MD' && pendingReq.targetCenter === 'B'));
+    const isInitiator = !isAdmin && normCenter(pendingReq.initiatorCenter) === normCenter(myCenterCode);
+    const isTarget = !isAdmin && normCenter(pendingReq.targetCenter) === normCenter(myCenterCode);
 
     const initInfo = CENTERS[pendingReq.initiatorCenter] || { name: pendingReq.initiatorCenter || 'Centro' };
     const targetInfo = CENTERS[pendingReq.targetCenter] || { name: pendingReq.targetCenter || 'Centro' };
@@ -644,7 +621,7 @@ function openEditSalidaModal(dateStr, salidaId, centerCode) {
         const isAdmin = currentUserKey === 'admin';
         centerSelector.classList.toggle('hidden', !isAdmin);
         if (isAdmin) {
-            getEl('edit-salida-center').value = centerCode === 'B' ? 'MD' : centerCode;
+            getEl('edit-salida-center').value = normCenter(centerCode);
         }
     }
 
@@ -707,8 +684,13 @@ function confirmEditSalida() {
         executeEditSalida(dateStr, salidaId, pax, newCenterCode, note)
             .then(() => {
                 pendingEditSalida = null;
+                showToast('Salida Modificada', 'Los cambios se han guardado.');
             })
-            .catch(err => showNotification('Error', err.message, true));
+            .catch(err => {
+                showNotification('Error', err.message, true);
+                pendingEditSalida = null;
+                renderAll();
+            });
         return;
     }
 
@@ -716,9 +698,17 @@ function confirmEditSalida() {
     const msg = `🤖 *AVISO AUTOMÁTICO*\n✏️ *MODIFICACIÓN DE SALIDA* - ${centerInfo.emoji} ${centerInfo.name}\nPara el ${dObj.getDate()} de ${MONTHS_ES[dObj.getMonth()].toUpperCase()}, ${actionWord} su salida en *Bajo de Fuera* de ${currentPax} a ${pax} plazas.`;
 
     triggerWhatsAppConfirm("Modificar Salida", msg, async () => {
-        await executeEditSalida(dateStr, salidaId, pax, newCenterCode, note);
-        sendBdfWebhook(msg).catch(console.error);
-        pendingEditSalida = null;
+        try {
+            await executeEditSalida(dateStr, salidaId, pax, newCenterCode, note);
+            sendBdfWebhook(msg).catch(console.error);
+            pendingEditSalida = null;
+            showToast('Salida Modificada', 'Los cambios se han guardado.');
+        } catch (err) {
+            console.error("Error modificando salida:", err);
+            showNotification('Error', err.message, true);
+            pendingEditSalida = null;
+            renderAll();
+        }
     });
 }
 
@@ -752,17 +742,30 @@ function confirmDeleteSalida() {
         executeDeleteSalida(dateStr, salidaId, centerCode)
             .then(() => {
                 pendingEditSalida = null;
+                showToast('Salida Eliminada', 'Se han liberado las plazas.');
             })
-            .catch(err => showNotification('Error', err.message, true));
+            .catch(err => {
+                showNotification('Error', err.message, true);
+                pendingEditSalida = null;
+                renderAll();
+            });
         return;
     }
 
     const msg = `🤖 *AVISO AUTOMÁTICO*\n🗑️ *CANCELACIÓN DE SALIDA* - ${centerInfo.emoji} ${centerInfo.name}\nPara el ${dObj.getDate()} de ${MONTHS_ES[dObj.getMonth()].toUpperCase()}, canceló su salida de *Bajo de Fuera*, liberando las plazas.`;
 
     triggerWhatsAppConfirm("Eliminar Salida", msg, async () => {
-        await executeDeleteSalida(dateStr, salidaId, centerCode);
-        sendBdfWebhook(msg).catch(console.error);
-        pendingEditSalida = null;
+        try {
+            await executeDeleteSalida(dateStr, salidaId, centerCode);
+            sendBdfWebhook(msg).catch(console.error);
+            pendingEditSalida = null;
+            showToast('Salida Eliminada', 'Se han liberado las plazas.');
+        } catch (err) {
+            console.error("Error eliminando salida:", err);
+            showNotification('Error', err.message, true);
+            pendingEditSalida = null;
+            renderAll();
+        }
     });
 }
 
@@ -846,6 +849,7 @@ function confirmCesionDirecta() {
             console.error("Error cediendo plazas:", err);
             showNotification('Error', err.message, true);
             pendingCesionDirecta = null;
+            renderAll();
         });
 }
 
@@ -899,11 +903,10 @@ function closeProposeSwapModal() {
 async function handleProposeSwapDateChange(selectedDateStr) {
     if (!proposeSwapState) return;
     const errP = getEl('propose-swap-date-error');
-    const step2Container = getEl('propose-swap-step2-container');
 
     if (!selectedDateStr) {
-        if (errP) errP.classList.add('hidden');
-        if (step2Container) step2Container.classList.add('hidden');
+        if (errP) hideEl('propose-swap-date-error');
+        hideEl('propose-swap-step2-container');
         return;
     }
 
@@ -911,86 +914,126 @@ async function handleProposeSwapDateChange(selectedDateStr) {
     if (selectedDateStr === proposeSwapState.sourceDate) {
         if (errP) {
             errP.textContent = 'No puedes seleccionar la misma fecha de tu salida actual.';
-            errP.classList.remove('hidden');
+            showEl('propose-swap-date-error');
         }
-        if (step2Container) step2Container.classList.add('hidden');
+        hideEl('propose-swap-step2-container');
         return;
     }
 
-    if (errP) errP.classList.add('hidden');
+    if (errP) hideEl('propose-swap-date-error');
     proposeSwapState.targetDate = selectedDateStr;
 
-    if (step2Container) step2Container.classList.remove('hidden');
+    showEl('propose-swap-step2-container');
     showEl('propose-swap-loading');
     hideEl('propose-swap-schools-list');
     hideEl('propose-swap-empty-day');
 
-    // Cargar los datos del día desde Firestore si no están en caché
-    const targetDayData = await ensureDayInCache(selectedDateStr);
-    hideEl('propose-swap-loading');
+    try {
+        // Cargar los datos del día desde Firestore si no están en caché
+        const targetDayData = await ensureDayInCache(selectedDateStr);
+        hideEl('propose-swap-loading');
 
-    const summary = getDaySummary(targetDayData, selectedDateStr);
-    getEl('propose-swap-target-summary').textContent = `${summary.totalOccupied}/${summary.totalQuota} plazas ocupadas`;
+        const summary = getDaySummary(targetDayData, selectedDateStr);
+        getEl('propose-swap-target-summary').textContent = `${summary.totalOccupied}/${summary.totalQuota} plazas ocupadas`;
 
-    const targetSalidas = getDaySalidas(targetDayData, selectedDateStr);
-    const normMyCode = (proposeSwapState.centerCode === 'B' || proposeSwapState.centerCode === 'MD') ? 'MD' : proposeSwapState.centerCode;
+        const targetSalidas = getDaySalidas(targetDayData, selectedDateStr);
+        const normMyCode = normCenter(proposeSwapState.centerCode);
 
-    // Filtrar plazas de la propia escuela
-    const otherSchoolsSalidas = targetSalidas.filter(s => {
-        const c = (s.centerCode === 'B' || s.centerCode === 'MD') ? 'MD' : s.centerCode;
-        return c !== normMyCode;
-    });
-
-    const schoolsList = getEl('propose-swap-schools-list');
-    const emptyDayContainer = getEl('propose-swap-empty-day');
-
-    if (otherSchoolsSalidas.length === 0) {
-        hideEl('propose-swap-schools-list');
-        showEl('propose-swap-empty-day');
-    } else {
-        hideEl('propose-swap-empty-day');
-        showEl('propose-swap-schools-list');
-
-        let rowsHtml = '';
-        otherSchoolsSalidas.forEach(s => {
-            const sCode = (s.centerCode === 'B' || s.centerCode === 'MD') ? 'MD' : s.centerCode;
-            const cInfo = CENTERS[sCode] || { name: sCode, hex: '#64748b' };
-            const totalPax = Number(s.plazas !== undefined ? s.plazas : s.pax) || 0;
-            const pendingReq = getPendingRequestForSalida(s.id, selectedDateStr, sCode);
-
-            if (pendingReq) {
-                rowsHtml += `
-                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between opacity-60 cursor-not-allowed">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full" style="background-color: ${cInfo.hex || '#64748b'}"></span>
-                        <span class="font-bold text-xs text-slate-700">${cInfo.name}</span>
-                        <span class="text-xs font-semibold text-slate-400">(${totalPax} pl.)</span>
-                    </div>
-                    <span class="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
-                        ⏳ Solicitud pendiente
-                    </span>
-                </div>
-                `;
-            } else {
-                rowsHtml += `
-                <button onclick="confirmProposeSwapWithSchool('${s.id}', '${sCode}', ${totalPax})"
-                        class="w-full p-3 bg-white hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-xl flex items-center justify-between transition-all group cursor-pointer shadow-xs">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full" style="background-color: ${cInfo.hex || '#64748b'}"></span>
-                        <span class="font-bold text-xs text-slate-800 group-hover:text-purple-900">${cInfo.name}</span>
-                        <span class="text-xs font-bold text-slate-500">(${totalPax} pl.)</span>
-                    </div>
-                    <span class="text-xs font-bold text-purple-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
-                        Permutar <span>→</span>
-                    </span>
-                </button>
-                `;
-            }
+        // Filtrar plazas de la propia escuela
+        const otherSchoolsSalidas = targetSalidas.filter(s => {
+            const c = normCenter(s.centerCode);
+            return c !== normMyCode;
         });
 
-        schoolsList.innerHTML = rowsHtml;
+        const schoolsList = getEl('propose-swap-schools-list');
+        const emptyDayContainer = getEl('propose-swap-empty-day');
+        const freeSpots = Math.max(0, summary.totalQuota - summary.totalOccupied);
+
+        if (otherSchoolsSalidas.length === 0) {
+            hideEl('propose-swap-schools-list');
+            showEl('propose-swap-empty-day');
+
+            const emptyP = emptyDayContainer.querySelector('p');
+            const moveBtn = getEl('btn-propose-swap-move');
+            if (freeSpots > 0) {
+                if (emptyP) emptyP.textContent = `Ninguna otra escuela tiene plazas asignadas en esta fecha (${freeSpots} plazas libres disponibles).`;
+                if (moveBtn) showEl('btn-propose-swap-move');
+            } else {
+                if (emptyP) emptyP.textContent = `El cupo de este día está completo (${summary.totalOccupied}/${summary.totalQuota}) y ninguna otra escuela tiene plazas.`;
+                if (moveBtn) hideEl('btn-propose-swap-move');
+            }
+        } else {
+            hideEl('propose-swap-empty-day');
+            showEl('propose-swap-schools-list');
+
+            let rowsHtml = '';
+            if (freeSpots > 0) {
+                rowsHtml += `
+                <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between shadow-xs mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">🚚</span>
+                        <div>
+                            <div class="font-bold text-xs text-emerald-900">Mover a plazas libres</div>
+                            <div class="text-[11px] text-emerald-700">Hay ${freeSpots} plazas disponibles en este día</div>
+                        </div>
+                    </div>
+                    <button onclick="handleProposeSwapMoveAction()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0">
+                        Mover aquí →
+                    </button>
+                </div>
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider my-2">O permutar con otra escuela:</div>
+                `;
+            }
+
+            otherSchoolsSalidas.forEach(s => {
+                const sCode = normCenter(s.centerCode);
+                const cInfo = CENTERS[sCode] || { name: sCode, hex: '#64748b' };
+                const totalPax = Number(s.plazas !== undefined ? s.plazas : s.pax) || 0;
+                const pendingReq = getPendingRequestForSalida(s.id, selectedDateStr, sCode);
+
+                if (pendingReq) {
+                    rowsHtml += `
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between opacity-60 cursor-not-allowed">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full" style="background-color: ${cInfo.hex || '#64748b'}"></span>
+                            <span class="font-bold text-xs text-slate-700">${cInfo.name}</span>
+                            <span class="text-xs font-semibold text-slate-400">(${totalPax} pl.)</span>
+                        </div>
+                        <span class="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                            ⏳ Solicitud pendiente
+                        </span>
+                    </div>
+                    `;
+                } else {
+                    rowsHtml += `
+                    <button onclick="confirmProposeSwapWithSchool('${s.id}', '${sCode}', ${totalPax})"
+                            class="w-full p-3 bg-white hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-xl flex items-center justify-between transition-all group cursor-pointer shadow-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full" style="background-color: ${cInfo.hex || '#64748b'}"></span>
+                            <span class="font-bold text-xs text-slate-800 group-hover:text-purple-900">${cInfo.name}</span>
+                            <span class="text-xs font-bold text-slate-500">(${totalPax} pl.)</span>
+                        </div>
+                        <span class="text-xs font-bold text-purple-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                            Permutar <span>→</span>
+                        </span>
+                    </button>
+                    `;
+                }
+            });
+
+            schoolsList.innerHTML = rowsHtml;
+        }
+    } catch (err) {
+        console.error("Error al cargar disponibilidad del día en wizard:", err);
+        hideEl('propose-swap-loading');
+        if (errP) {
+            errP.textContent = 'Error al cargar los datos del día. Por favor, reintenta.';
+            showEl('propose-swap-date-error');
+        }
     }
 }
+
+window.handleProposeSwapDateChange = handleProposeSwapDateChange;
 
 function confirmProposeSwapWithSchool(targetSalidaId, targetCenterCode, targetPax) {
     if (!proposeSwapState) return;
@@ -1289,9 +1332,9 @@ function confirmPartialAction() {
     hideEl('partial-action-modal');
 
     if (pendingPartialSwap) {
-        const { dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB } = pendingPartialSwap;
+        const { dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB, spaceA, spaceB } = pendingPartialSwap;
         pendingPartialSwap = null;
-        executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB);
+        executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB, spaceA, spaceB);
     } else if (pendingPartialMove) {
         const { sourceBoat, targetDate, safeSpots } = pendingPartialMove;
         pendingPartialMove = null;
@@ -1387,21 +1430,42 @@ async function initiateSwap(sourceBoat, targetSalida) {
     await Promise.all([ensureDayInCache(dateA), ensureDayInCache(dateB)]);
 
     const salidaIdA = sourceBoat.id;
-    const centerA = (sourceBoat.centerCode === 'B' || sourceBoat.centerCode === 'MD') ? 'MD' : sourceBoat.centerCode;
+    const centerA = normCenter(sourceBoat.centerCode);
     const paxA = Number(sourceBoat.totalPlazas !== undefined ? sourceBoat.totalPlazas : (sourceBoat.plazas !== undefined ? sourceBoat.plazas : sourceBoat.pax)) || 0;
 
     const salidaIdB = targetSalida.id;
-    const centerB = (targetSalida.centerCode === 'B' || targetSalida.centerCode === 'MD') ? 'MD' : targetSalida.centerCode;
+    const centerB = normCenter(targetSalida.centerCode);
     const paxB = Number(targetSalida.totalPlazas !== undefined ? targetSalida.totalPlazas : (targetSalida.plazas !== undefined ? targetSalida.plazas : targetSalida.pax)) || 0;
 
     const dayDataA = monthDaysCache[dateA] || null;
     const summaryA = getDaySummary(dayDataA, dateA);
     const maxQuotaA = getDayQuota(dateA, dayDataA);
-    const spaceA = maxQuotaA - (summaryA.totalOccupied - paxA);
 
     const dayDataB = monthDaysCache[dateB] || null;
     const summaryB = getDaySummary(dayDataB, dateB);
     const maxQuotaB = getDayQuota(dateB, dayDataB);
+
+    // Bug 5: Si algún día supera el cupo (admin redujo el cupo por debajo de lo reservado), bloquear con "Error de Cupo"
+    if (summaryA.totalOccupied > maxQuotaA) {
+        const dA = formatDateShort(parseDateT00(dateA));
+        showNotification(
+            'Error de Cupo',
+            `No se puede realizar el intercambio: el día ${dA} supera el cupo máximo permitido (${summaryA.totalOccupied}/${maxQuotaA} plazas ocupadas).`,
+            true
+        );
+        return;
+    }
+    if (summaryB.totalOccupied > maxQuotaB) {
+        const dB = formatDateShort(parseDateT00(dateB));
+        showNotification(
+            'Error de Cupo',
+            `No se puede realizar el intercambio: el día ${dB} supera el cupo máximo permitido (${summaryB.totalOccupied}/${maxQuotaB} plazas ocupadas).`,
+            true
+        );
+        return;
+    }
+
+    const spaceA = maxQuotaA - (summaryA.totalOccupied - paxA);
     const spaceB = maxQuotaB - (summaryB.totalOccupied - paxB);
 
     // Case 1: When is a Swap Truly Impossible? (space_A <= 0 or space_B <= 0)
@@ -1428,7 +1492,7 @@ async function initiateSwap(sourceBoat, targetSalida) {
         const dA = formatDateShort(parseDateT00(dateA));
         const dB = formatDateShort(parseDateT00(dateB));
 
-        pendingPartialSwap = { dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB };
+        pendingPartialSwap = { dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB, spaceA, spaceB };
 
         let msg = `Para el intercambio entre ${cAInfo.name} (${dA}) y ${cBInfo.name} (${dB}):\n\n`;
         if (paxA > spaceB) {
@@ -1445,51 +1509,73 @@ async function initiateSwap(sourceBoat, targetSalida) {
     }
 
     // Intercambio limpio sin división
-    executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB);
+    executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB, spaceA, spaceB);
 }
 
 /**
  * Ejecuta el movimiento de salida con control de Admin y WhatsApp (Scenario 4A / 4B.Option 1).
  */
 function executeMoveWithAdminCheck(sourceDate, targetDate, salidaId, centerCode, pax) {
-    const centerInfo = CENTERS[centerCode] || { name: centerCode, emoji: '⛵' };
+    const normCode = normCenter(centerCode);
+    const centerInfo = CENTERS[normCode] || { name: normCode, emoji: '⛵' };
     const d1 = formatDateShort(parseDateT00(sourceDate));
     const d2 = formatDateShort(parseDateT00(targetDate));
 
-    // Admin: ejecución inmediata en 0ms
+    // Admin: ejecución inmediata
     if (currentUserKey === 'admin') {
-        executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, pax)
-            .catch(err => showNotification('Error', err.message, true));
+        executeMoveSalida(sourceDate, targetDate, salidaId, normCode, pax)
+            .then(() => {
+                showToast('Salida Movida', `Movidas ${pax} plazas al ${d2}.`);
+            })
+            .catch(err => {
+                showNotification('Error', err.message, true);
+                renderAll();
+            });
         return;
     }
 
     const msg = `🤖 *AVISO AUTOMÁTICO*\n➡️ *CAMBIO DE FECHA* - ${centerInfo.emoji} ${centerInfo.name}\nMovió su salida de *Bajo de Fuera* del ${d1} al ${d2} (${pax} plazas).`;
 
     triggerWhatsAppConfirm("Cambio de Fecha", msg, async () => {
-        await executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, pax);
-        sendBdfWebhook(msg).catch(console.error);
+        try {
+            await executeMoveSalida(sourceDate, targetDate, salidaId, normCode, pax);
+            sendBdfWebhook(msg).catch(console.error);
+            showToast('Salida Movida', `Movidas ${pax} plazas al ${d2}.`);
+        } catch (err) {
+            console.error("Error moviendo salida:", err);
+            showNotification('Error', err.message, true);
+            renderAll();
+        }
     });
 }
 
 /**
  * Ejecuta el intercambio de fechas entre dos centros con control de Admin y WhatsApp (Section 5).
  */
-function executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB) {
-    const cAInfo = CENTERS[centerA] || { name: centerA, emoji: '⛵' };
-    const cBInfo = CENTERS[centerB] || { name: centerB, emoji: '⛵' };
+function executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB, spaceA = null, spaceB = null) {
+    const normA = normCenter(centerA);
+    const normB = normCenter(centerB);
+    const cAInfo = CENTERS[normA] || { name: normA, emoji: '⛵' };
+    const cBInfo = CENTERS[normB] || { name: normB, emoji: '⛵' };
     const dA = formatDateShort(parseDateT00(dateA));
     const dB = formatDateShort(parseDateT00(dateB));
 
-    // Admin: ejecución inmediata (Section 0)
+    // Admin: ejecución inmediata
     if (currentUserKey === 'admin') {
-        executeSwapSalidas(dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB)
-            .catch(err => showNotification('Error', err.message, true));
+        executeSwapSalidas(dateA, salidaIdA, normA, safeA, retainedA, dateB, salidaIdB, normB, safeB, retainedB)
+            .then(() => {
+                showToast('Intercambio Completado', `Intercambio realizado entre ${cAInfo.name} (${dA}) y ${cBInfo.name} (${dB}).`);
+            })
+            .catch(err => {
+                showNotification('Error', err.message, true);
+                renderAll();
+            });
         return;
     }
 
     const myCode = USER_CENTER_KEYS[currentUserKey];
-    const targetCenter = (centerA === myCode) ? centerB : centerA;
-    const targetInfo = CENTERS[targetCenter] || { name: targetCenter };
+    const targetCenter = (normA === normCenter(myCode)) ? normB : normA;
+    const targetInfo = CENTERS[normCenter(targetCenter)] || { name: targetCenter };
 
     const msg = `🤖 *AVISO AUTOMÁTICO*\n🔀 *PROPUESTA DE INTERCAMBIO* - ${cAInfo.emoji} ${cAInfo.name} ↔️ ${cBInfo.emoji} ${cBInfo.name}\n${cAInfo.name} pasa del ${dA} al ${dB} (${safeA} plazas), y ${cBInfo.name} pasa al ${dA} (${safeB} plazas). Entrad al visor para acordarlo.`;
 
@@ -1501,23 +1587,27 @@ function executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, 
                 targetCenter: targetCenter,
                 dateA,
                 salidaIdA,
-                centerA,
+                centerA: normA,
                 paxA: safeA,
                 retainedPaxA: retainedA,
                 dateB,
                 salidaIdB,
-                centerB,
+                centerB: normB,
                 paxB: safeB,
-                retainedPaxB: retainedB
+                retainedPaxB: retainedB,
+                spaceA,
+                spaceB
             });
             sendBdfWebhook(msg).catch(console.error);
+            showToast('Propuesta Enviada', `Propuesta enviada a ${targetInfo.name}.`);
             logBdfHistory('swap_request', {
-                dateA, dateB, centerA, centerB, paxA: safeA, retainedPaxA: retainedA, paxB: safeB, retainedPaxB: retainedB,
+                dateA, dateB, centerA: normA, centerB: normB, paxA: safeA, retainedPaxA: retainedA, paxB: safeB, retainedPaxB: retainedB,
                 initiatorCenter: myCode, targetCenter
             }).catch(console.error);
         } catch (err) {
             console.error("Error enviando propuesta de intercambio:", err);
             showNotification('Error', err.message, true);
+            renderAll();
         }
     });
 }

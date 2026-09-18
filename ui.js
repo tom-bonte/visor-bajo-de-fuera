@@ -17,8 +17,6 @@ function renderAll() {
 
     if (activeViewMode === 'mensual') {
         renderMonthlyCalendar();
-    } else if (activeViewMode === 'semanal') {
-        renderWeeklyCalendar();
     } else if (activeViewMode === 'estadisticas') {
         renderStats();
     } else if (activeViewMode === 'historial') {
@@ -38,15 +36,9 @@ function renderHeader() {
 
     // Actualizar clases de las pestañas superiores
     const tabMensual = getEl('tab-mensual');
-    const tabSemanal = getEl('tab-semanal');
     const tabStats = getEl('tab-estadisticas');
     if (tabMensual) {
         tabMensual.className = activeViewMode === 'mensual' 
-            ? "px-3 md:px-5 py-1.5 md:py-2 tab-active flex items-center gap-1.5 transition-all whitespace-nowrap"
-            : "px-3 md:px-5 py-1.5 md:py-2 tab-inactive flex items-center gap-1.5 transition-all whitespace-nowrap";
-    }
-    if (tabSemanal) {
-        tabSemanal.className = activeViewMode === 'semanal'
             ? "px-3 md:px-5 py-1.5 md:py-2 tab-active flex items-center gap-1.5 transition-all whitespace-nowrap"
             : "px-3 md:px-5 py-1.5 md:py-2 tab-inactive flex items-center gap-1.5 transition-all whitespace-nowrap";
     }
@@ -108,7 +100,7 @@ function renderHeader() {
 
     // Botón volver al calendario si estamos en historial o estadísticas
     const btnBack = getEl('btn-back-to-calendar');
-    if (btnBack) btnBack.classList.toggle('hidden', activeViewMode === 'mensual' || activeViewMode === 'semanal');
+    if (btnBack) btnBack.classList.toggle('hidden', activeViewMode === 'mensual');
 }
 
 /**
@@ -333,7 +325,7 @@ function renderMonthlyCalendar() {
         // Salidas independientes del día (Section 0)
         const daySalidas = getDaySalidas(dayData, dateStr);
         const visibleSalidas = daySalidas.filter(s => {
-            return activeCenterFilters.has(s.centerCode) || (s.centerCode === 'MD' && activeCenterFilters.has('B'));
+            return activeCenterFilters.has(normCenter(s.centerCode));
         });
 
         // Ordenar las salidas: las del usuario logueado primero, luego por plazas descendente
@@ -386,7 +378,7 @@ function renderMonthlyCalendar() {
             <div class="flex-1 flex flex-col gap-1 pt-0.5">
                 ${displayBoxes.length > 0 ? displayBoxes.map(box => {
                     const cInfo = CENTERS[box.centerCode] || { name: box.centerCode, color: 'bg-slate-700', text: 'text-white' };
-                    const isMy = !isGuestMode && (box.centerCode === myCenterCode || (myCenterCode === 'MD' && box.centerCode === 'B'));
+                    const isMy = !isGuestMode && normCenter(box.centerCode) === normCenter(myCenterCode);
                     const pendingReq = getPendingRequestForSalida(box.id, dateStr, box.centerCode);
                     const isLocked = !!pendingReq;
 
@@ -444,7 +436,7 @@ function renderMonthlyCalendar() {
                         ${noteIndicator}
                         <div class="truncate flex items-center gap-1.5 pointer-events-none min-w-0">
                             <span class="min-w-[18px] px-1 h-4 rounded-md flex items-center justify-center font-black text-[8px] text-white shrink-0 shadow-2xs" style="background-color: ${dotColor}">
-                                ${box.centerCode === 'B' ? 'MD' : box.centerCode}
+                                ${normCenter(box.centerCode)}
                             </span>
                             <span class="truncate font-bold text-[10.5px] md:text-[11px] text-slate-900 tracking-tight">${boxLabel}</span>
                         </div>
@@ -464,266 +456,6 @@ function renderMonthlyCalendar() {
         </div>
         `;
     }
-
-    html += `
-        </div>
-    </div>
-    `;
-
-    container.innerHTML = html;
-}
-
-/**
- * Renderiza el Calendario Semanal interactivo (Vista espaciosa de 7 días, ideal para pantallas menos saturadas).
- */
-function renderWeeklyCalendar() {
-    const container = getEl('main-view-container');
-    if (!container) return;
-
-    if (!currentDate || isNaN(currentDate.getTime())) {
-        currentDate = new Date(currentYear, currentMonth, 14);
-    }
-
-    const monday = getMonday(currentDate);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-
-    const weekNum = getWeekNumber(monday);
-    const todayStr = getStrYMD(new Date());
-
-    let myCenterCode = null;
-    if (!isGuestMode && currentUserKey !== 'admin') {
-        myCenterCode = USER_CENTER_KEYS[currentUserKey] || null;
-    }
-
-    // Texto de rango de fechas de la semana
-    const mMonthStr = MONTHS_SHORT[monday.getMonth()].toUpperCase();
-    const sMonthStr = MONTHS_SHORT[sunday.getMonth()].toUpperCase();
-    const rangeText = (monday.getMonth() === sunday.getMonth())
-        ? `${monday.getDate()} al ${sunday.getDate()} de ${MONTHS_ES[monday.getMonth()]} ${monday.getFullYear()}`
-        : `${monday.getDate()} ${mMonthStr} al ${sunday.getDate()} ${sMonthStr} ${sunday.getFullYear()}`;
-
-    // Calcular estadísticas de la semana completa
-    let weekTotalOccupied = 0;
-    let weekTotalQuota = 0;
-
-    const daysData = [];
-    for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        const dStr = getStrYMD(d);
-        const dayData = monthDaysCache[dStr] || null;
-        const summary = getDaySummary(dayData, dStr);
-        weekTotalOccupied += summary.totalOccupied;
-        weekTotalQuota += summary.totalQuota;
-        daysData.push({ d, dStr, dayData, summary });
-    }
-
-    let html = `
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-        
-        <!-- Cabecera de la Semana: Navegación + Título + Estadísticas -->
-        <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
-                <div class="flex items-center gap-1.5">
-                    <button onclick="changeWeek(-1)" class="p-1.5 md:px-2.5 md:py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="Semana anterior">
-                        <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-                        <span class="hidden md:inline">Anterior</span>
-                    </button>
-                    <button onclick="goToCurrentWeek()" class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer">
-                        Hoy
-                    </button>
-                    <button onclick="changeWeek(1)" class="p-1.5 md:px-2.5 md:py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="Semana siguiente">
-                        <span class="hidden md:inline">Siguiente</span>
-                        <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-                    </button>
-                </div>
-
-                <span class="text-[10px] font-black px-2 py-1 rounded bg-blue-100 text-blue-800 uppercase tracking-wider shrink-0">
-                    Semana ${weekNum}
-                </span>
-            </div>
-
-            <div class="text-center sm:text-left">
-                <h2 class="text-sm md:text-base font-black text-slate-800 uppercase tracking-tight">
-                    ${rangeText}
-                </h2>
-            </div>
-
-            <div class="flex items-center gap-2 shrink-0">
-                <span class="text-xs font-bold text-slate-600 bg-white border border-slate-200 px-3 py-1 rounded-lg shadow-2xs">
-                    Total Semana: <b class="text-blue-600 font-black">${weekTotalOccupied}</b> / ${weekTotalQuota} pl.
-                </span>
-            </div>
-        </div>
-
-        <!-- Matriz Semanal de 7 Columnas -->
-        <div class="grid grid-cols-1 md:grid-cols-7 gap-[1px] bg-slate-200">
-    `;
-
-    daysData.forEach(({ d, dStr, dayData, summary }) => {
-        const isToday = dStr === todayStr;
-        const dayOfWeekIndex = d.getDay(); // 0 is Sunday, 1 is Monday...
-        const dayName = DAYS_ES[dayOfWeekIndex];
-        const isWeekend = (dayOfWeekIndex === 0 || dayOfWeekIndex === 6);
-
-        // Salidas / Plazas independientes del día
-        const daySalidas = getDaySalidas(dayData, dStr);
-        const visibleSalidas = daySalidas.filter(s => {
-            return activeCenterFilters.has(s.centerCode) || (s.centerCode === 'MD' && activeCenterFilters.has('B'));
-        });
-
-        // Ordenar: usuario logueado primero, luego por plazas descendente
-        visibleSalidas.sort((a, b) => {
-            const isMyA = a.centerCode === myCenterCode;
-            const isMyB = b.centerCode === myCenterCode;
-            if (isMyA && !isMyB) return -1;
-            if (!isMyA && isMyB) return 1;
-            return (b.plazas || b.pax) - (a.plazas || a.pax);
-        });
-
-        // Expandir a cajas de visualización de máximo 12 plazas (Section 0)
-        const displayBoxes = [];
-        visibleSalidas.forEach(s => {
-            const boxes = getSchoolDisplayBoxes(s);
-            displayBoxes.push(...boxes);
-        });
-
-        const occupancyPct = summary.totalQuota > 0 ? Math.min(100, Math.round((summary.totalOccupied / summary.totalQuota) * 100)) : 0;
-        let progressBg = 'bg-blue-600';
-        if (occupancyPct >= 100) progressBg = 'bg-slate-700';
-        else if (occupancyPct >= 80) progressBg = 'bg-emerald-500';
-
-        html += `
-        <div ondblclick="handleDayDoubleClick('${dStr}')" data-date="${dStr}" 
-             class="dropzone bg-white min-h-[260px] md:min-h-[440px] p-2.5 md:p-3 flex flex-col justify-start hover:bg-slate-50/80 transition-colors group relative cursor-pointer">
-            
-            <!-- Cabecera de la Columna Diaria -->
-            <div class="border-b border-slate-100 pb-2.5 mb-2.5 pointer-events-none">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <span class="text-[10px] font-black uppercase tracking-wider ${isWeekend ? 'text-blue-600' : 'text-slate-400'}">
-                            ${dayName}
-                        </span>
-                        <div class="flex items-baseline gap-1.5">
-                            <span class="text-lg md:text-xl font-black ${isToday ? 'text-blue-600' : 'text-slate-800'}">
-                                ${d.getDate()}
-                            </span>
-                            <span class="text-xs font-bold text-slate-500 uppercase">
-                                ${MONTHS_SHORT[d.getMonth()]}
-                            </span>
-                        </div>
-                    </div>
-
-                    ${isToday ? `
-                        <span class="px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white shadow-xs">
-                            HOY
-                        </span>
-                    ` : ''}
-                </div>
-
-                <!-- Barra de Cupo y Capacidad Disponible -->
-                <div class="mt-2">
-                    <div class="flex items-center justify-between text-[10px] font-bold text-slate-500 mb-1">
-                        <span>${summary.totalOccupied} / ${summary.totalQuota} pl.</span>
-                        ${summary.poolAvailable > 0 ? `
-                            <span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                                ${summary.poolAvailable} libres
-                            </span>
-                        ` : ''}
-                    </div>
-                    <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                        <div class="${progressBg} h-full transition-all duration-300 rounded-full" style="width: ${occupancyPct}%"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Lista de Plazas Asignadas (Cajas de visualización máx 12 - Section 0) -->
-            <div class="flex-1 flex flex-col gap-1.5 pt-0.5">
-                ${displayBoxes.length > 0 ? displayBoxes.map(box => {
-                    const isMy = box.centerCode === myCenterCode;
-                    const cInfo = CENTERS[box.centerCode] || { name: box.centerCode, emoji: '⛵' };
-                    const pendingReq = getPendingRequestForSalida(box.id, dStr, box.centerCode);
-                    const isLocked = !!pendingReq;
-
-                    const canDrag = !isGuestMode && (currentUserKey === 'admin' || (isMy && !isLocked));
-                    const dragAttrs = canDrag 
-                        ? `draggable="true" data-drag-id="${box.id}" data-drag-date="${dStr}" data-drag-center="${box.centerCode}" data-drag-pax="${box.totalPlazas}"` 
-                        : '';
-                    const cursorClass = canDrag ? 'draggable-item cursor-grab active:cursor-grabbing' : (isLocked ? 'cursor-not-allowed opacity-90' : 'cursor-pointer');
-                    const actionTip = isLocked 
-                        ? 'Plazas bloqueadas por solicitud pendiente.' 
-                        : ((currentUserKey === 'admin' || isMy) ? 'Doble clic para editar o ceder.' : 'Doble clic para pedir plazas.');
-
-                    const pBg = cInfo.pastelBg || 'bg-slate-50';
-                    const pBorder = cInfo.pastelBorder || 'border-slate-200';
-                    const dotColor = cInfo.hex || '#64748b';
-                    const boxLabel = box.isMultiBox ? `${cInfo.name} [${box.boxIndex + 1}/${box.totalBoxes}]` : cInfo.name;
-
-                    const hasNote = box.note && box.note.trim() !== '';
-                    const safeNote = hasNote ? escapeHtml(box.note) : '';
-
-                    const noteIndicator = hasNote 
-                        ? `<span class="absolute -top-1 -right-1 flex h-2.5 w-2.5 z-20 pointer-events-none"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500 border border-white shadow-xs"></span></span>` 
-                        : '';
-
-                    const pendingTooltipHtml = isLocked ? formatPendingRequestTooltip(pendingReq, dStr, box.centerCode) : '';
-
-                    let customTooltip = '';
-                    if (hasNote || pendingTooltipHtml) {
-                        let tooltipContent = '';
-                        if (hasNote) {
-                            tooltipContent += `
-                                <div class="note-title">Nota adjunta</div>
-                                <div class="note-body">${safeNote}</div>
-                            `;
-                        }
-                        if (pendingTooltipHtml) {
-                            if (hasNote) tooltipContent += `<div class="my-2 border-t border-slate-700"></div>`;
-                            tooltipContent += pendingTooltipHtml;
-                        }
-                        customTooltip = `<div class="custom-tooltip note-tooltip">${tooltipContent}</div>`;
-                    }
-
-                    const mySalidaClass = isMy ? 'my-salida' : '';
-                    const mySalidaStyle = isMy ? `style="--my-center-color: ${dotColor};"` : '';
-                    const pendingAttr = pendingReq ? `data-pending-request-id="${pendingReq.id}"` : '';
-
-                    return `
-                    <div ${dragAttrs} ${pendingAttr}
-                         onclick="handleBoatClick(event, '${dStr}', '${box.id}', '${box.centerCode}')"
-                         ondblclick="handleBoatDoubleClick(event, '${dStr}', '${box.id}', '${box.centerCode}')" 
-                         ${mySalidaStyle}
-                         class="boat-block select-none w-full rounded-xl p-2 flex items-center justify-between ${pBg} border ${pBorder} shadow-xs hover:shadow-sm hover:brightness-98 ${cursorClass} transition-all ${mySalidaClass}">
-                        ${customTooltip}
-                        ${noteIndicator}
-                        <div class="flex items-center gap-2 pointer-events-none min-w-0 pr-1">
-                            <span class="w-6 h-6 rounded-lg flex items-center justify-center font-black text-[10px] text-white shrink-0 shadow-2xs" style="background-color: ${dotColor}">
-                                ${box.centerCode === 'B' ? 'MD' : box.centerCode}
-                            </span>
-                            <div class="truncate">
-                                <span class="font-black text-xs text-slate-900 tracking-tight block leading-tight truncate">${boxLabel}</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-1.5 shrink-0 pointer-events-none">
-                            ${isLocked ? `<span class="text-xs font-bold text-amber-700 bg-amber-100/90 px-1 py-0.5 rounded" title="Plazas bloqueadas">⏳</span>` : ''}
-                            <span class="font-black text-xs px-2 py-0.5 bg-white rounded-md border border-slate-200/80 text-slate-800 shadow-2xs">
-                                ${box.boxPax} <span class="text-[9px] font-bold text-slate-400">pl.</span>
-                            </span>
-                        </div>
-                    </div>
-                    `;
-                }).join('') : `
-                    <div class="h-full flex flex-col items-center justify-center text-center p-4 text-slate-300 hover:text-slate-400 text-xs italic pointer-events-none select-none transition-colors">
-                        <svg class="w-6 h-6 mb-1.5 opacity-30" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-                        <span>+ Doble clic para añadir</span>
-                    </div>
-                `}
-            </div>
-
-        </div>
-        `;
-    });
 
     html += `
         </div>
@@ -992,13 +724,17 @@ function renderStats() {
         const d = parseDateT00(dateStr);
         if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
             const dayData = monthDaysCache[dateStr];
-            Object.keys(CENTERS).forEach(k => {
-                if (!activeCenterFilters.has(k)) return;
-                const bal = getCenterBalance(k, dayData);
-                if (bal.effectiveSlots > 0) {
-                    cStats[k].plazas += bal.effectiveSlots;
-                    cStats[k].barcos += 1;
-                    gTotPlazas += bal.effectiveSlots;
+            const salidas = getDaySalidas(dayData, dateStr);
+            salidas.forEach(s => {
+                const code = normCenter(s.centerCode);
+                if (!activeCenterFilters.has(code)) return;
+                const p = Number(s.plazas !== undefined ? s.plazas : s.pax) || 0;
+                if (p > 0) {
+                    if (cStats[code]) {
+                        cStats[code].plazas += p;
+                        cStats[code].barcos += 1;
+                    }
+                    gTotPlazas += p;
                     gTotBarcos += 1;
                 }
             });
@@ -1020,16 +756,6 @@ function renderStats() {
             <div>
                 <h2 class="text-lg font-black text-slate-900 tracking-tight uppercase">Estadísticas Mensuales · Bajo de Fuera</h2>
                 <p class="text-xs text-slate-500 font-medium">${MONTHS_ES[currentMonth]} ${currentYear} · ${gTotPlazas} plazas asignadas de ${gTotMonthQuota} plazas totales del mes (${gTotMonthQuota > 0 ? ((gTotPlazas / gTotMonthQuota) * 100).toFixed(1) : '0.0'}% ocupación)</p>
-            </div>
-
-            <!-- Selector de Mes de Estadísticas -->
-            <div class="flex items-center gap-2">
-                <label class="text-xs font-bold text-slate-600">Mes:</label>
-                <select onchange="onMonthDropdownChange(this.value); renderStats();" class="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-800 cursor-pointer">
-                    ${MONTHS_ES.map((name, idx) => `
-                        <option value="${idx}" ${idx === currentMonth ? 'selected' : ''}>${name} ${currentYear}</option>
-                    `).join('')}
-                </select>
             </div>
         </div>
 

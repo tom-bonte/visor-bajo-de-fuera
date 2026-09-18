@@ -158,6 +158,17 @@ function normalizeCenterCode(val) {
 }
 
 /**
+ * Normaliza el código de centro mapeando 'B' a 'MD'.
+ * @param {string} code
+ * @returns {string}
+ */
+function normCenter(code) {
+    if (!code) return '';
+    return (code === 'B' || code === 'MD') ? 'MD' : code;
+}
+
+
+/**
  * Normaliza cualquier formato de fecha legible (D/M/YY, D/M/YYYY, YYYY-MM-DD, D-M-YYYY)
  * al formato estricto ISO 'YYYY-MM-DD'.
  * @param {string} rawDate

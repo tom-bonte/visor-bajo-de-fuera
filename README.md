@@ -10,7 +10,6 @@ Sistema interactivo de gestión de plazas y calendario oficial para el Bajo de F
    - Junio a Septiembre: 30 plazas diarias.
    - 1 al 15 de Octubre: 30 plazas los fines de semana (sábados y domingos); 13 plazas de lunes a viernes.
    - Resto del año: 13 plazas diarias.
-   - Bloques visuales de hasta 12 buceadores por boya/barco.
 
 2. **Intercambios y Cesiones de Plazas**:
    - **Cesión Directa**: Transferencia inmediata de plazas en un solo paso hacia otra escuela.
