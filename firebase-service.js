@@ -94,19 +94,35 @@ function listenCurrentDay(dateStr) {
 }
 
 /**
- * Inicia la escucha de todos los días de un mes para la vista mensual de calendario.
- * @param {number} year
- * @param {number} month - 0 a 11
+ * Inicia la escucha de un rango de fechas visible para el calendario.
+ * Soporta (startStr, endStr) en formato 'YYYY-MM-DD', o (year, month) para retrocompatibilidad.
+ * @param {string|number} startDateOrYear
+ * @param {string|number} endDateOrMonth
  */
-function listenMonthOverview(year, month) {
+function listenMonthOverview(startDateOrYear, endDateOrMonth) {
     if (unsubscribeMonthListener) {
         unsubscribeMonthListener();
         unsubscribeMonthListener = null;
     }
 
-    const startStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-    const lastDayNum = new Date(year, month + 1, 0).getDate();
-    const endStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}`;
+    let startStr = startDateOrYear;
+    let endStr = endDateOrMonth;
+
+    // Retrocompatibilidad si se pasa (year, month)
+    if (typeof startDateOrYear === 'number') {
+        const year = startDateOrYear;
+        const month = endDateOrMonth;
+        const firstDay = new Date(year, month, 1);
+        let startDow = firstDay.getDay() - 1;
+        if (startDow === -1) startDow = 6;
+        const firstVis = new Date(year, month, 1 - startDow);
+        const lastDay = new Date(year, month + 1, 0);
+        const total = startDow + lastDay.getDate();
+        const rem = (7 - (total % 7)) % 7;
+        const lastVis = new Date(year, month, lastDay.getDate() + rem);
+        startStr = getStrYMD(firstVis);
+        endStr = getStrYMD(lastVis);
+    }
 
     unsubscribeMonthListener = db.collection(BDF_COLLECTIONS.DAYS)
         .where(firebase.firestore.FieldPath.documentId(), '>=', startStr)
@@ -131,8 +147,40 @@ function listenMonthOverview(year, month) {
             });
             renderAll();
         }, (error) => {
-            console.error("Error escuchando mes en Firestore:", error);
+            console.error("Error escuchando rango en Firestore:", error);
         });
+}
+
+/**
+ * Asegura que los datos de un día estén cargados en monthDaysCache.
+ * Si no están en caché, los consulta directamente de Firestore antes de operar.
+ * @param {string} dateStr - 'YYYY-MM-DD'
+ * @returns {Promise<Object>}
+ */
+async function ensureDayInCache(dateStr) {
+    if (monthDaysCache[dateStr]) {
+        return monthDaysCache[dateStr];
+    }
+    const dayCap = getDayQuota(dateStr);
+    try {
+        const docSnap = await db.collection(BDF_COLLECTIONS.DAYS).doc(dateStr).get();
+        if (docSnap.exists) {
+            const d = docSnap.data() || {};
+            if (d.allocations && d.allocations['B']) {
+                if (!d.allocations['MD']) d.allocations['MD'] = d.allocations['B'];
+                delete d.allocations['B'];
+            }
+            monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: dayCap, ...d };
+        } else {
+            monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: dayCap, salidas: [], allocations: {} };
+        }
+    } catch (err) {
+        console.error(`Error obteniendo día ${dateStr} de Firestore:`, err);
+        if (!monthDaysCache[dateStr]) {
+            monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: dayCap, salidas: [], allocations: {} };
+        }
+    }
+    return monthDaysCache[dateStr];
 }
 
 /**
@@ -236,6 +284,8 @@ async function acceptBdfRequest(requestId) {
  */
 async function acceptBdfSwap(req) {
     const { id: requestId, dateA, salidaIdA, centerA, paxA, retainedPaxA = 0, dateB, salidaIdB, centerB, paxB, retainedPaxB = 0 } = req;
+    await Promise.all([ensureDayInCache(dateA), ensureDayInCache(dateB)]);
+
     const cAInfo = CENTERS[centerA] || { name: centerA, emoji: '⛵' };
     const cBInfo = CENTERS[centerB] || { name: centerB, emoji: '⛵' };
     const dA = formatDateShort(parseDateT00(dateA));
@@ -264,6 +314,7 @@ async function acceptBdfSwap(req) {
  */
 async function acceptBdfSpotTransfer(req) {
     const { id: requestId, date, requestedPax, pax, isFull } = req;
+    await ensureDayInCache(date);
     const spots = Number(requestedPax || pax || 0);
 
     const isDonation = req.type === 'donation';
@@ -605,6 +656,8 @@ async function executeAddSalida(dateStr, centerCode, pax, note = '') {
     pax = parseInt(pax, 10);
     if (isNaN(pax) || pax <= 0) throw new Error("La cantidad de plazas debe ser mayor a 0");
 
+    await ensureDayInCache(dateStr);
+
     const normCode = (centerCode === 'B' || centerCode === 'MD') ? 'MD' : centerCode;
     const dayCap = getDayQuota(dateStr, monthDaysCache[dateStr]);
     const dayData = monthDaysCache[dateStr] || null;
@@ -687,6 +740,8 @@ async function executeEditSalida(dateStr, salidaId, newPax, newCenterCode = null
     newPax = parseInt(newPax, 10);
     if (isNaN(newPax) || newPax <= 0) throw new Error("La cantidad de plazas debe ser mayor a 0");
 
+    await ensureDayInCache(dateStr);
+
     const dayCap = getDayQuota(dateStr, monthDaysCache[dateStr]);
     const dayData = monthDaysCache[dateStr] || null;
     const currentSalidas = getDaySalidas(dayData, dateStr);
@@ -758,6 +813,7 @@ async function executeEditSalida(dateStr, salidaId, newPax, newCenterCode = null
  * @param {string} [centerCode]
  */
 async function executeDeleteSalida(dateStr, salidaId, centerCode = null) {
+    await ensureDayInCache(dateStr);
     const dayData = monthDaysCache[dateStr] || null;
     let currentSalidas = getDaySalidas(dayData, dateStr);
 
@@ -809,6 +865,8 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
     if (sourceDate === targetDate) return;
     paxToMove = parseInt(paxToMove, 10);
     if (isNaN(paxToMove) || paxToMove <= 0) return;
+
+    await Promise.all([ensureDayInCache(sourceDate), ensureDayInCache(targetDate)]);
 
     const normCode = (centerCode === 'B' || centerCode === 'MD') ? 'MD' : centerCode;
 
@@ -865,7 +923,7 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
 
     renderAll();
 
-    // 4. Guardado atómico en Firestore
+    // 4. Guardado atómico en Firestore por Lote (Batch)
     const batch = db.batch();
     const sourceRef = db.collection(BDF_COLLECTIONS.DAYS).doc(sourceDate);
     const targetRef = db.collection(BDF_COLLECTIONS.DAYS).doc(targetDate);
@@ -874,24 +932,19 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
         date: sourceDate,
         totalQuota: sourceCap,
         salidas: sourceSalidas,
-        allocations: syncAllocationsFromSalidas(sourceSalidas),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        allocations: syncAllocationsFromSalidas(sourceSalidas)
     }, { merge: true });
 
     batch.set(targetRef, {
         date: targetDate,
         totalQuota: targetCap,
         salidas: targetSalidas,
-        allocations: syncAllocationsFromSalidas(targetSalidas),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        allocations: syncAllocationsFromSalidas(targetSalidas)
     }, { merge: true });
 
-    batch.commit().catch(err => {
-        console.error("Error guardando movimiento de salida en Firestore:", err);
-        showToast('Error', 'No se pudo mover la salida en la nube.', true);
-    });
+    await batch.commit();
 
-    // 5. Auditoría en segundo plano (solo para centros)
+    // 5. Auditoría (solo para centros, nunca para admin)
     if (currentUserKey !== 'admin') {
         logBdfHistory('move_salida', {
             from: sourceDate,
@@ -912,6 +965,8 @@ async function executeSwapSalidas(dateA, salidaIdA, centerA, safePaxA, retainedP
     safePaxB = parseInt(safePaxB, 10) || 0;
     retainedPaxA = parseInt(retainedPaxA, 10) || 0;
     retainedPaxB = parseInt(retainedPaxB, 10) || 0;
+
+    await Promise.all([ensureDayInCache(dateA), ensureDayInCache(dateB)]);
 
     const normA = (centerA === 'B' || centerA === 'MD') ? 'MD' : centerA;
     const normB = (centerB === 'B' || centerB === 'MD') ? 'MD' : centerB;
@@ -1036,6 +1091,8 @@ async function executeSwapSalidas(dateA, salidaIdA, centerA, safePaxA, retainedP
 async function executeSpotTransferSalidas(dateStr, givingSalidaId, fromCenter, toCenter, spots, note = '') {
     spots = parseInt(spots, 10);
     if (isNaN(spots) || spots <= 0) throw new Error("La cantidad de plazas debe ser mayor a 0");
+
+    await ensureDayInCache(dateStr);
 
     const normFrom = (fromCenter === 'B' || fromCenter === 'MD') ? 'MD' : fromCenter;
     const normTo = (toCenter === 'B' || toCenter === 'MD') ? 'MD' : toCenter;

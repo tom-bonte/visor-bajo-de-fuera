@@ -19,8 +19,8 @@ auth.onAuthStateChanged((user) => {
     hideEl('password-modal');
     hideEl('password-error');
 
-    // Iniciar escucha del mes actual, del historial y de solicitudes pendientes
-    listenMonthOverview(currentYear, currentMonth);
+    // Iniciar escucha del rango visible actual, del historial y de solicitudes pendientes
+    refreshRangeListener();
     listenHistoryLogs();
     listenBdfRequests();
 
@@ -87,11 +87,46 @@ function openHelpModal() {
    2. CONTROL DE VISTAS Y MESES
    ========================================================================= */
 
+/**
+ * Calcula el rango de fechas visible en el calendario según la vista activa.
+ * @returns {{ startStr: string, endStr: string }}
+ */
+function getVisibleDateRange() {
+    if (activeViewMode === 'semanal') {
+        if (!currentDate || isNaN(currentDate.getTime())) {
+            currentDate = new Date(currentYear, currentMonth, 14);
+        }
+        const monday = getMonday(currentDate);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        return { startStr: getStrYMD(monday), endStr: getStrYMD(sunday) };
+    } else {
+        const firstDay = new Date(currentYear, currentMonth, 1);
+        let startDow = firstDay.getDay() - 1;
+        if (startDow === -1) startDow = 6;
+        const firstVis = new Date(currentYear, currentMonth, 1 - startDow);
+        const lastDay = new Date(currentYear, currentMonth + 1, 0);
+        const total = startDow + lastDay.getDate();
+        const rem = (7 - (total % 7)) % 7;
+        const lastVis = new Date(currentYear, currentMonth, lastDay.getDate() + rem);
+        return { startStr: getStrYMD(firstVis), endStr: getStrYMD(lastVis) };
+    }
+}
+
+/**
+ * Actualiza la suscripción de Firestore para cubrir todo el rango visible de fechas.
+ */
+function refreshRangeListener() {
+    const { startStr, endStr } = getVisibleDateRange();
+    listenMonthOverview(startStr, endStr);
+}
+
 function switchView(mode) {
     activeViewMode = mode;
     if (mode === 'semanal' && (!currentDate || isNaN(currentDate.getTime()))) {
         currentDate = new Date(currentYear, currentMonth, 14);
     }
+    refreshRangeListener();
     renderAll();
 }
 
@@ -105,7 +140,7 @@ function selectMonth(m, y = 2026) {
     currentYear = y;
     currentDate = new Date(currentYear, currentMonth, 1);
     activeViewMode = 'mensual'; // Salir automáticamente de estadísticas o historial y mostrar el mes seleccionado
-    listenMonthOverview(currentYear, currentMonth);
+    refreshRangeListener();
     renderAll();
 }
 
@@ -120,7 +155,7 @@ function changeMonth(delta) {
     }
 
     currentDate = new Date(currentYear, currentMonth, 1);
-    listenMonthOverview(currentYear, currentMonth);
+    refreshRangeListener();
     renderAll();
 }
 
@@ -132,13 +167,9 @@ function changeWeek(delta) {
     newD.setDate(newD.getDate() + (delta * 7));
     currentDate = newD;
 
-    const newM = currentDate.getMonth();
-    const newY = currentDate.getFullYear();
-    if (newM !== currentMonth || newY !== currentYear) {
-        currentMonth = newM;
-        currentYear = newY;
-        listenMonthOverview(currentYear, currentMonth);
-    }
+    currentMonth = currentDate.getMonth();
+    currentYear = currentDate.getFullYear();
+    refreshRangeListener();
     renderAll();
 }
 
@@ -147,7 +178,7 @@ function goToCurrentWeek() {
     currentYear = 2026;
     currentMonth = (now.getFullYear() === 2026) ? now.getMonth() : 8;
     currentDate = new Date(currentYear, currentMonth, (now.getFullYear() === 2026) ? now.getDate() : 14);
-    listenMonthOverview(currentYear, currentMonth);
+    refreshRangeListener();
     renderAll();
 }
 
@@ -158,7 +189,7 @@ function goToCurrentMonth() {
     currentDate = new Date(currentYear, currentMonth, (now.getFullYear() === 2026) ? now.getDate() : 14);
     activeViewMode = 'mensual'; // Salir automáticamente de estadísticas o historial y mostrar el mes actual
     expandedYears[2026] = true;
-    listenMonthOverview(currentYear, currentMonth);
+    refreshRangeListener();
     renderAll();
 }
 
@@ -257,7 +288,7 @@ function openNewSalidaModal(dateStr, targetCenterCode = null) {
     }
 
     const dObj = parseDateT00(dateStr);
-    const allowedMax = remainingCapacity;
+    const allowedMax = Math.min(MAX_BOAT_CAP, remainingCapacity);
     pendingNewSalida = { date: dateStr, targetCenterCode: targetCenter, remainingCapacity, dayCap };
 
     getEl('new-salida-title').textContent = `Bajo de Fuera · ${formatDateShort(dObj)}`;
@@ -307,6 +338,10 @@ function confirmNewSalida() {
         showToast('Error', 'Introduce un número válido de plazas.', true);
         return;
     }
+    if (pax > MAX_BOAT_CAP) {
+        showToast('Límite excedido', `El máximo permitido es de ${MAX_BOAT_CAP} plazas por barco.`, true);
+        return;
+    }
 
     // Verificar cupo restante en tiempo real
     const dayData = monthDaysCache[date] || null;
@@ -316,10 +351,6 @@ function confirmNewSalida() {
 
     if (currentRemaining <= 0) {
         showNotification('Cupo Lleno', `El cupo diario de ${maxDayCap} plazas ya está completo para este día.`, true);
-        return;
-    }
-    if (pax > currentRemaining) {
-        showToast('Límite excedido', `Solo quedan ${currentRemaining} plazas disponibles para este día (cupo: ${maxDayCap}).`, true);
         return;
     }
 
@@ -343,7 +374,7 @@ function confirmNewSalida() {
             });
         return;
     }
-
+    1
     const msg = `🤖 *AVISO AUTOMÁTICO*\n➕ *NUEVA SALIDA* - ${centerInfo.emoji} ${centerInfo.name}\nPara el ${dObj.getDate()} de ${MONTHS_ES[dObj.getMonth()].toUpperCase()}, añadió una salida a *Bajo de Fuera* de ${pax} plazas.`;
 
     triggerWhatsAppConfirm("Nueva Salida", msg, async () => {
@@ -472,10 +503,10 @@ function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
                 </div>
             </div>
             <p class="text-xs text-slate-500">
-                ${isInitiator ? 'Has propuesto este intercambio. Puedes retirarlo en cualquier momento para liberar las plazas.' : 
-                  isTarget ? `${initInfo.name} te ha enviado esta propuesta. Puedes aceptarla o rechazarla.` :
-                  isAdmin ? 'Como Administrador, puedes retirar o anular esta solicitud para desbloquear las plazas.' :
-                  'Esta salida está bloqueada mientras espera respuesta entre las escuelas involucradas.'}
+                ${isInitiator ? 'Has propuesto este intercambio. Puedes retirarlo en cualquier momento para liberar las plazas.' :
+                isTarget ? `${initInfo.name} te ha enviado esta propuesta. Puedes aceptarla o rechazarla.` :
+                    isAdmin ? 'Como Administrador, puedes retirar o anular esta solicitud para desbloquear las plazas.' :
+                        'Esta salida está bloqueada mientras espera respuesta entre las escuelas involucradas.'}
             </p>
         `;
     } else if (pendingReq.type === 'request') {
@@ -494,10 +525,10 @@ function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
                 </div>
             </div>
             <p class="text-xs text-slate-500">
-                ${isInitiator ? 'Has realizado esta petición. Puedes retirarla en cualquier momento para liberar la salida.' : 
-                  isTarget ? `${initInfo.name} te pide plazas. Puedes cederlas aceptando la petición o denegarla.` :
-                  isAdmin ? 'Como Administrador, puedes retirar esta solicitud para desbloquear la salida.' :
-                  'Esta salida está bloqueada por una petición pendiente.'}
+                ${isInitiator ? 'Has realizado esta petición. Puedes retirarla en cualquier momento para liberar la salida.' :
+                isTarget ? `${initInfo.name} te pide plazas. Puedes cederlas aceptando la petición o denegarla.` :
+                    isAdmin ? 'Como Administrador, puedes retirar esta solicitud para desbloquear la salida.' :
+                        'Esta salida está bloqueada por una petición pendiente.'}
             </p>
         `;
     } else {
@@ -516,10 +547,10 @@ function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
                 </div>
             </div>
             <p class="text-xs text-slate-500">
-                ${isInitiator ? 'Ofreciste ceder estas plazas. Puedes retirar la oferta.' : 
-                  isTarget ? 'Puedes aceptar o rechazar las plazas ofrecidas.' :
-                  isAdmin ? 'Como Administrador, puedes retirar esta solicitud.' :
-                  'Salida en proceso de cesión.'}
+                ${isInitiator ? 'Ofreciste ceder estas plazas. Puedes retirar la oferta.' :
+                isTarget ? 'Puedes aceptar o rechazar las plazas ofrecidas.' :
+                    isAdmin ? 'Como Administrador, puedes retirar esta solicitud.' :
+                        'Salida en proceso de cesión.'}
             </p>
         `;
     }
@@ -586,7 +617,7 @@ function openEditSalidaModal(dateStr, salidaId, centerCode) {
     const dayCap = getDayQuota(dateStr, dayData);
     const freeSpots = Math.max(0, dayCap - summary.totalOccupied);
     const availableForThisBoat = currentPax + freeSpots;
-    const allowedMax = availableForThisBoat;
+    const allowedMax = Math.min(MAX_BOAT_CAP, availableForThisBoat);
 
     pendingEditSalida = {
         dateStr,
@@ -622,6 +653,11 @@ function openEditSalidaModal(dateStr, salidaId, centerCode) {
         btnSave.textContent = currentUserKey === 'admin' ? "Guardar Cambios" : "Siguiente";
     }
 
+    const btnSwap = getEl('btn-open-proponer-intercambio');
+    if (btnSwap) {
+        btnSwap.classList.toggle('hidden', currentUserKey === 'admin');
+    }
+
     showEl('edit-salida-modal');
     setTimeout(() => {
         paxInput.focus();
@@ -639,6 +675,10 @@ function confirmEditSalida() {
     const pax = parseInt(getEl('edit-salida-pax').value, 10);
     if (!pax || isNaN(pax) || pax <= 0) {
         showNotification('Error', 'Introduce un número válido de plazas.', true);
+        return;
+    }
+    if (pax > MAX_BOAT_CAP) {
+        showNotification('Límite excedido', `El máximo permitido es de ${MAX_BOAT_CAP} plazas por barco.`, true);
         return;
     }
 
@@ -810,6 +850,213 @@ function confirmCesionDirecta() {
 }
 
 /* =========================================================================
+   6C. PROPONER INTERCAMBIO SIN DRAG & DROP (Wizard)
+   ========================================================================= */
+
+let proposeSwapState = null;
+
+function openProponerIntercambioFromEdit() {
+    if (!pendingEditSalida) return;
+    const { dateStr, salidaId, centerCode, currentPax } = pendingEditSalida;
+    hideEl('edit-salida-modal');
+
+    proposeSwapState = {
+        sourceDate: dateStr,
+        salidaId,
+        centerCode,
+        pax: currentPax,
+        targetDate: null
+    };
+
+    const cInfo = CENTERS[centerCode] || { name: centerCode };
+    const dObj = parseDateT00(dateStr);
+
+    getEl('propose-swap-subtitle').textContent = `Bajo de Fuera · ${formatDateShort(dObj)}`;
+    getEl('propose-swap-origin-info').innerHTML = `
+        <div class="flex items-center justify-between w-full">
+            <span><b>${cInfo.name}</b> · Tu salida actual:</span>
+            <span class="font-bold bg-purple-200/80 px-2 py-0.5 rounded text-purple-950">${currentPax} plazas el ${formatDateShort(dObj)}</span>
+        </div>
+    `;
+
+    const dateInput = getEl('propose-swap-target-date');
+    if (dateInput) {
+        dateInput.value = '';
+    }
+
+    const errP = getEl('propose-swap-date-error');
+    if (errP) errP.classList.add('hidden');
+
+    hideEl('propose-swap-step2-container');
+    showEl('propose-swap-modal');
+}
+
+function closeProposeSwapModal() {
+    hideEl('propose-swap-modal');
+    proposeSwapState = null;
+}
+
+async function handleProposeSwapDateChange(selectedDateStr) {
+    if (!proposeSwapState) return;
+    const errP = getEl('propose-swap-date-error');
+    const step2Container = getEl('propose-swap-step2-container');
+
+    if (!selectedDateStr) {
+        if (errP) errP.classList.add('hidden');
+        if (step2Container) step2Container.classList.add('hidden');
+        return;
+    }
+
+    // La fecha actual de la escuela no es seleccionable
+    if (selectedDateStr === proposeSwapState.sourceDate) {
+        if (errP) {
+            errP.textContent = 'No puedes seleccionar la misma fecha de tu salida actual.';
+            errP.classList.remove('hidden');
+        }
+        if (step2Container) step2Container.classList.add('hidden');
+        return;
+    }
+
+    if (errP) errP.classList.add('hidden');
+    proposeSwapState.targetDate = selectedDateStr;
+
+    if (step2Container) step2Container.classList.remove('hidden');
+    showEl('propose-swap-loading');
+    hideEl('propose-swap-schools-list');
+    hideEl('propose-swap-empty-day');
+
+    // Cargar los datos del día desde Firestore si no están en caché
+    const targetDayData = await ensureDayInCache(selectedDateStr);
+    hideEl('propose-swap-loading');
+
+    const summary = getDaySummary(targetDayData, selectedDateStr);
+    getEl('propose-swap-target-summary').textContent = `${summary.totalOccupied}/${summary.totalQuota} plazas ocupadas`;
+
+    const targetSalidas = getDaySalidas(targetDayData, selectedDateStr);
+    const normMyCode = (proposeSwapState.centerCode === 'B' || proposeSwapState.centerCode === 'MD') ? 'MD' : proposeSwapState.centerCode;
+
+    // Filtrar plazas de la propia escuela
+    const otherSchoolsSalidas = targetSalidas.filter(s => {
+        const c = (s.centerCode === 'B' || s.centerCode === 'MD') ? 'MD' : s.centerCode;
+        return c !== normMyCode;
+    });
+
+    const schoolsList = getEl('propose-swap-schools-list');
+    const emptyDayContainer = getEl('propose-swap-empty-day');
+
+    if (otherSchoolsSalidas.length === 0) {
+        hideEl('propose-swap-schools-list');
+        showEl('propose-swap-empty-day');
+    } else {
+        hideEl('propose-swap-empty-day');
+        showEl('propose-swap-schools-list');
+
+        let rowsHtml = '';
+        otherSchoolsSalidas.forEach(s => {
+            const sCode = (s.centerCode === 'B' || s.centerCode === 'MD') ? 'MD' : s.centerCode;
+            const cInfo = CENTERS[sCode] || { name: sCode, hex: '#64748b' };
+            const totalPax = Number(s.plazas !== undefined ? s.plazas : s.pax) || 0;
+            const pendingReq = getPendingRequestForSalida(s.id, selectedDateStr, sCode);
+
+            if (pendingReq) {
+                rowsHtml += `
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between opacity-60 cursor-not-allowed">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full" style="background-color: ${cInfo.hex || '#64748b'}"></span>
+                        <span class="font-bold text-xs text-slate-700">${cInfo.name}</span>
+                        <span class="text-xs font-semibold text-slate-400">(${totalPax} pl.)</span>
+                    </div>
+                    <span class="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                        ⏳ Solicitud pendiente
+                    </span>
+                </div>
+                `;
+            } else {
+                rowsHtml += `
+                <button onclick="confirmProposeSwapWithSchool('${s.id}', '${sCode}', ${totalPax})"
+                        class="w-full p-3 bg-white hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-xl flex items-center justify-between transition-all group cursor-pointer shadow-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full" style="background-color: ${cInfo.hex || '#64748b'}"></span>
+                        <span class="font-bold text-xs text-slate-800 group-hover:text-purple-900">${cInfo.name}</span>
+                        <span class="text-xs font-bold text-slate-500">(${totalPax} pl.)</span>
+                    </div>
+                    <span class="text-xs font-bold text-purple-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                        Permutar <span>→</span>
+                    </span>
+                </button>
+                `;
+            }
+        });
+
+        schoolsList.innerHTML = rowsHtml;
+    }
+}
+
+function confirmProposeSwapWithSchool(targetSalidaId, targetCenterCode, targetPax) {
+    if (!proposeSwapState) return;
+    const { sourceDate, salidaId, centerCode, pax, targetDate } = proposeSwapState;
+
+    const sourceBoat = {
+        id: salidaId,
+        dateStr: sourceDate,
+        centerCode: centerCode,
+        pax: pax,
+        totalPlazas: pax
+    };
+
+    const targetSalida = {
+        id: targetSalidaId,
+        date: targetDate,
+        centerCode: targetCenterCode,
+        pax: targetPax,
+        totalPlazas: targetPax
+    };
+
+    closeProposeSwapModal();
+    initiateSwap(sourceBoat, targetSalida);
+}
+
+function handleProposeSwapMoveAction() {
+    if (!proposeSwapState || !proposeSwapState.targetDate) return;
+    const { sourceDate, salidaId, centerCode, pax, targetDate } = proposeSwapState;
+
+    const sourceBoat = {
+        id: salidaId,
+        dateStr: sourceDate,
+        centerCode: centerCode,
+        pax: pax,
+        totalPlazas: pax
+    };
+
+    closeProposeSwapModal();
+    initiateMoveToDate(sourceBoat, targetDate);
+}
+
+/**
+ * Lógica reutilizable para mover plazas a un día objetivo (Scenario 4A).
+ * Gestiona cupo lleno, movimiento completo o ajuste automático parcial (split).
+ * @param {Object} sourceBoat
+ * @param {string} targetDate
+ */
+async function initiateMoveToDate(sourceBoat, targetDate) {
+    const targetDayData = await ensureDayInCache(targetDate);
+    const targetSummary = getDaySummary(targetDayData, targetDate);
+    const targetCap = getDayQuota(targetDate, targetDayData);
+    const freeSpotsTarget = targetCap - targetSummary.totalOccupied;
+
+    if (freeSpotsTarget <= 0) {
+        showNotification('Cupo Lleno', `No se puede mover la salida al ${formatDateShort(parseDateT00(targetDate))} porque el cupo diario está completamente lleno.`, true);
+        return;
+    }
+
+    if (freeSpotsTarget >= sourceBoat.pax) {
+        executeMoveWithAdminCheck(sourceBoat.dateStr, targetDate, sourceBoat.id, sourceBoat.centerCode, sourceBoat.pax);
+    } else {
+        promptPartialMove(sourceBoat, targetDate, freeSpotsTarget);
+    }
+}
+
+/* =========================================================================
    7. SOLICITAR PLAZAS A OTRA ESCUELA (Section 3 - Request Spots)
    ========================================================================= */
 
@@ -915,7 +1162,7 @@ document.addEventListener('dragstart', (e) => {
     try {
         e.dataTransfer.setData('text/plain', String(draggedBoat.id));
         e.dataTransfer.effectAllowed = 'move';
-    } catch (err) {}
+    } catch (err) { }
 
     setTimeout(() => block.classList.add('opacity-50'), 0);
 });
@@ -1002,20 +1249,8 @@ document.addEventListener('drop', (e) => {
     // Scenario 4A: Target Day has NO other schools (empty or free capacity only)
     // =========================================================================
     if (otherSchoolsSalidas.length === 0) {
-        // 3. Target day is 100% full (free_spots_target <= 0)
-        if (freeSpotsTarget <= 0) {
-            showNotification('Cupo Lleno', `No se puede mover la salida al ${formatDateShort(parseDateT00(targetDate))} porque el cupo diario está completamente lleno.`, true);
-            return;
-        }
-        // 1. All spots fit (free_spots_target >= boat.pax)
-        if (freeSpotsTarget >= draggedBoat.pax) {
-            executeMoveWithAdminCheck(draggedBoat.dateStr, targetDate, draggedBoat.id, draggedBoat.centerCode, draggedBoat.pax);
-        } 
-        // 2. Partial spots fit (0 < free_spots_target < boat.pax) -> Automatic Reduction & Split
-        else {
-            promptPartialMove(draggedBoat, targetDate, freeSpotsTarget);
-        }
-    } 
+        initiateMoveToDate(draggedBoat, targetDate);
+    }
     // =========================================================================
     // Scenario 4B: Target Day ALREADY HAS departures from other schools
     // =========================================================================
@@ -1121,17 +1356,11 @@ function cancelSwapChoice() {
 
 function selectTakeHueco() {
     if (!pendingSwap) return;
-    const { sourceBoat, targetDate, freeSpotsTarget } = pendingSwap;
+    const { sourceBoat, targetDate } = pendingSwap;
     hideEl('swap-choice-modal');
     pendingSwap = null;
 
-    if (freeSpotsTarget >= sourceBoat.pax) {
-        executeMoveWithAdminCheck(sourceBoat.dateStr, targetDate, sourceBoat.id, sourceBoat.centerCode, sourceBoat.pax);
-    } else if (freeSpotsTarget > 0) {
-        promptPartialMove(sourceBoat, targetDate, freeSpotsTarget);
-    } else {
-        showNotification('Cupo Lleno', 'No quedan plazas disponibles en este día.', true);
-    }
+    initiateMoveToDate(sourceBoat, targetDate);
 }
 
 /**
@@ -1150,13 +1379,17 @@ function selectSwapWithSalida(targetSalida) {
 /**
  * Cálculos bilaterales y validaciones de Swap (Section 5).
  */
-function initiateSwap(sourceBoat, targetSalida) {
+async function initiateSwap(sourceBoat, targetSalida) {
     const dateA = sourceBoat.dateStr;
+    const dateB = targetSalida.date;
+
+    // Asegurar que ambas fechas están cargadas en caché aunque pertenezcan a meses distintos
+    await Promise.all([ensureDayInCache(dateA), ensureDayInCache(dateB)]);
+
     const salidaIdA = sourceBoat.id;
     const centerA = (sourceBoat.centerCode === 'B' || sourceBoat.centerCode === 'MD') ? 'MD' : sourceBoat.centerCode;
     const paxA = Number(sourceBoat.totalPlazas !== undefined ? sourceBoat.totalPlazas : (sourceBoat.plazas !== undefined ? sourceBoat.plazas : sourceBoat.pax)) || 0;
 
-    const dateB = targetSalida.date;
     const salidaIdB = targetSalida.id;
     const centerB = (targetSalida.centerCode === 'B' || targetSalida.centerCode === 'MD') ? 'MD' : targetSalida.centerCode;
     const paxB = Number(targetSalida.totalPlazas !== undefined ? targetSalida.totalPlazas : (targetSalida.plazas !== undefined ? targetSalida.plazas : targetSalida.pax)) || 0;
@@ -1370,7 +1603,7 @@ async function handleImport(e) {
 }
 
 function promptEmptyData() {
-    try { backupAllToCSV(); } catch(e) { console.error("Error al generar backup previo a vaciado:", e); }
+    try { backupAllToCSV(); } catch (e) { console.error("Error al generar backup previo a vaciado:", e); }
     setTimeout(() => showEl('empty-confirm-modal'), 800);
 }
 
@@ -1546,7 +1779,7 @@ async function confirmImportCsv() {
 }
 
 // Cerrar menús al hacer clic fuera
-document.addEventListener('click', function(e) {
+document.addEventListener('click', function (e) {
     const userMenu = getEl('user-menu-wrapper');
     const userDropdown = getEl('user-dropdown');
     if (userMenu && userDropdown && !userMenu.contains(e.target)) {
@@ -1561,7 +1794,7 @@ document.addEventListener('click', function(e) {
 });
 
 // Inicialización inmediata al cargar
-listenMonthOverview(currentYear, currentMonth);
+refreshRangeListener();
 listenHistoryLogs();
 listenBdfRequests();
 renderAll();

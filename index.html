@@ -334,10 +334,15 @@
                     <button onclick="cancelEditSalida()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm cursor-pointer">Cancelar</button>
                     <button id="btn-save-edit-salida" onclick="confirmEditSalida()" class="w-1/2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm cursor-pointer">Guardar Cambios</button>
                 </div>
-                <!-- Opción 5: Ceder Plazas (Cesión Directa) -->
-                <button id="btn-open-cesion-directa" onclick="openCesionDirectaFromEdit()" class="w-full px-4 py-2.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors shadow-xs flex justify-center items-center gap-1.5 cursor-pointer">
-                    <span>🎁 Ceder Plazas a Otra Escuela</span>
-                </button>
+                <!-- Acciones entre escuelas: Ceder Plazas o Proponer Intercambio -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-open-cesion-directa" onclick="openCesionDirectaFromEdit()" class="w-full px-2.5 py-2.5 rounded-lg text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors shadow-xs flex justify-center items-center gap-1 cursor-pointer">
+                        <span>🎁 Ceder Plazas</span>
+                    </button>
+                    <button id="btn-open-proponer-intercambio" onclick="openProponerIntercambioFromEdit()" class="w-full px-2.5 py-2.5 rounded-lg text-xs font-bold text-purple-800 bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-colors shadow-xs flex justify-center items-center gap-1 cursor-pointer">
+                        <span>🔄 Proponer Intercambio</span>
+                    </button>
+                </div>
                 <button onclick="promptDeleteSalida()" class="w-full px-4 py-2.5 rounded-lg text-xs font-bold text-red-600 border border-red-200 hover:bg-red-50 transition-colors shadow-xs flex justify-center items-center gap-1.5 cursor-pointer">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -395,6 +400,83 @@
             <div class="flex gap-2.5">
                 <button onclick="cancelCesionDirecta()" class="w-1/2 px-4 py-2.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer">Cancelar</button>
                 <button onclick="confirmCesionDirecta()" class="w-1/2 px-4 py-2.5 rounded-lg text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors shadow-sm cursor-pointer">Ceder Plazas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Proponer Intercambio (Wizard Paso a Paso) -->
+    <div id="propose-swap-modal" class="fixed inset-0 z-[105] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md transition-opacity p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 transform transition-all max-h-[90vh] flex flex-col">
+            <!-- Cabecera -->
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-lg shrink-0">
+                        🔄
+                    </div>
+                    <div>
+                        <h3 class="text-base font-black text-slate-800 leading-tight">Proponer Intercambio</h3>
+                        <p id="propose-swap-subtitle" class="text-xs font-semibold text-slate-500">Bajo de Fuera</p>
+                    </div>
+                </div>
+                <button onclick="closeProposeSwapModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="overflow-y-auto py-4 space-y-4 flex-1">
+                <!-- Info Salida Origen -->
+                <div id="propose-swap-origin-info" class="p-3 bg-purple-50/70 border border-purple-200/80 rounded-xl text-xs text-purple-900 font-medium">
+                    <!-- Dinámico: Tu fecha y plazas -->
+                </div>
+
+                <!-- Paso 1: Selección de Fecha Destino -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Paso 1: Selecciona la fecha deseada
+                    </label>
+                    <input type="date" id="propose-swap-target-date"
+                           class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                           onchange="handleProposeSwapDateChange(this.value)">
+                    <p id="propose-swap-date-error" class="text-[11px] font-bold text-red-600 mt-1.5 hidden"></p>
+                </div>
+
+                <!-- Paso 2: Lista de Escuelas o Mover Plazas -->
+                <div id="propose-swap-step2-container" class="hidden space-y-2.5 pt-1">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Paso 2: Permutar con escuela
+                        </label>
+                        <span id="propose-swap-target-summary" class="text-[11px] font-bold text-slate-500"></span>
+                    </div>
+
+                    <!-- Indicador de carga -->
+                    <div id="propose-swap-loading" class="hidden py-6 text-center text-xs text-slate-400">
+                        <div class="inline-block animate-spin rounded-full h-5 w-5 border-2 border-purple-500 border-t-transparent mb-1.5"></div>
+                        <p>Consultando disponibilidad del día...</p>
+                    </div>
+
+                    <!-- Lista de Escuelas disponibles para swap -->
+                    <div id="propose-swap-schools-list" class="space-y-2">
+                        <!-- Rellenado dinámicamente -->
+                    </div>
+
+                    <!-- Caso de día sin otras escuelas: Opción Mover Mis Plazas -->
+                    <div id="propose-swap-empty-day" class="hidden p-4 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-3">
+                        <p class="text-xs font-medium text-slate-600">
+                            Ninguna otra escuela tiene plazas asignadas en esta fecha.
+                        </p>
+                        <button id="btn-propose-swap-move" onclick="handleProposeSwapMoveAction()" class="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span>🚚 Mover mis plazas a este día</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="pt-3 border-t border-slate-100 flex justify-end shrink-0">
+                <button onclick="closeProposeSwapModal()" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">
+                    Cerrar
+                </button>
             </div>
         </div>
     </div>
@@ -898,13 +980,13 @@
     </div>
 
     <!-- Carga de Scripts -->
-    <script src="config.js?v=4.5"></script>
-    <script src="utils.js?v=4.5"></script>
-    <script src="state.js?v=4.5"></script>
-    <script src="firebase-service.js?v=4.5"></script>
-    <script src="export.js?v=4.5"></script>
-    <script src="ui.js?v=4.5"></script>
-    <script src="app.js?v=4.5"></script>
+    <script src="config.js?v=4.6"></script>
+    <script src="utils.js?v=4.6"></script>
+    <script src="state.js?v=4.6"></script>
+    <script src="firebase-service.js?v=4.6"></script>
+    <script src="export.js?v=4.6"></script>
+    <script src="ui.js?v=4.6"></script>
+    <script src="app.js?v=4.6"></script>
 
 </body>
 </html>

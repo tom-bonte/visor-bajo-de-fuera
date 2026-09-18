@@ -315,14 +315,17 @@ function renderMonthlyCalendar() {
         <div class="grid grid-cols-7 gap-[1px] bg-slate-200">
     `;
 
-    // Celdas vacías del principio de mes
-    for (let i = 0; i < startDayOfWeek; i++) {
-        html += `<div class="bg-slate-50/40 min-h-[110px] md:min-h-[130px] p-1.5"></div>`;
-    }
+    const totalRendered = startDayOfWeek + daysInMonth;
+    const remainingSlots = (7 - (totalRendered % 7)) % 7;
+    const totalCells = totalRendered + remainingSlots;
+    const firstVisibleDate = new Date(currentYear, currentMonth, 1 - startDayOfWeek);
 
-    // Celdas de cada día del mes
-    for (let d = 1; d <= daysInMonth; d++) {
-        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    // Celdas de cada día visible en la cuadrícula (incluyendo días limítrofes del mes anterior y posterior)
+    for (let i = 0; i < totalCells; i++) {
+        const cellDate = new Date(firstVisibleDate.getFullYear(), firstVisibleDate.getMonth(), firstVisibleDate.getDate() + i);
+        const dateStr = getStrYMD(cellDate);
+        const isCurrentMonth = cellDate.getMonth() === currentMonth;
+        const d = cellDate.getDate();
         const dayData = monthDaysCache[dateStr] || null;
         const summary = getDaySummary(dayData, dateStr);
         const isToday = dateStr === todayStr;
@@ -342,19 +345,27 @@ function renderMonthlyCalendar() {
             return (b.plazas || b.pax) - (a.plazas || a.pax);
         });
 
-        // Expandir a cajas de visualización de máximo 12 plazas (Section 0)
+        // Expandir a cajas de visualización (1 caja unificada por centro)
         const displayBoxes = [];
         visibleSalidas.forEach(s => {
             const boxes = getSchoolDisplayBoxes(s);
             displayBoxes.push(...boxes);
         });
 
+        const cellBgClass = isCurrentMonth
+            ? 'bg-white hover:bg-slate-50/80'
+            : 'bg-slate-100/70 hover:bg-slate-100/90 opacity-60 hover:opacity-100';
+
+        const dayNumberClass = isToday
+            ? 'w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-sm text-xs font-black'
+            : (isCurrentMonth ? 'text-xs font-black text-slate-700' : 'text-xs font-bold text-slate-400');
+
         html += `
-        <div ondblclick="handleDayDoubleClick('${dateStr}')" data-date="${dateStr}" class="dropzone bg-white min-h-[105px] md:min-h-[125px] p-1.5 md:p-2 flex flex-col justify-start hover:bg-slate-50/80 transition-colors group relative border-t border-transparent cursor-pointer">
+        <div ondblclick="handleDayDoubleClick('${dateStr}')" data-date="${dateStr}" class="dropzone ${cellBgClass} min-h-[105px] md:min-h-[125px] p-1.5 md:p-2 flex flex-col justify-start transition-all group relative border-t border-transparent cursor-pointer">
             
             <!-- Cabecera de Celda: Número de Día + Plazas Ocupadas / Cupo -->
             <div class="flex items-center justify-between mb-1.5 pointer-events-none">
-                <span class="text-xs font-black ${isToday ? 'w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-sm' : 'text-slate-700'}">
+                <span class="${dayNumberClass}">
                     ${d}
                 </span>
 
@@ -366,16 +377,16 @@ function renderMonthlyCalendar() {
                         </span>
                     ` : ''}
                     <span class="text-[9.5px] md:text-[10px] font-bold ${summary.totalOccupied >= summary.totalQuota ? 'text-slate-500' : 'text-slate-400'}">
-                        ${summary.totalOccupied}/${summary.totalQuota} pl.
+                        ${summary.totalOccupied > 0 || isCurrentMonth ? `${summary.totalOccupied}/${summary.totalQuota} pl.` : ''}
                     </span>
                 </div>
             </div>
 
-            <!-- Lista de Cajas de Plazas (Máximo 12 plazas por caja - Section 0) -->
+            <!-- Lista de Cajas de Plazas -->
             <div class="flex-1 flex flex-col gap-1 pt-0.5">
                 ${displayBoxes.length > 0 ? displayBoxes.map(box => {
-                    const isMy = box.centerCode === myCenterCode;
-                    const cInfo = CENTERS[box.centerCode] || { name: box.centerCode, emoji: '⛵' };
+                    const cInfo = CENTERS[box.centerCode] || { name: box.centerCode, color: 'bg-slate-700', text: 'text-white' };
+                    const isMy = !isGuestMode && (box.centerCode === myCenterCode || (myCenterCode === 'MD' && box.centerCode === 'B'));
                     const pendingReq = getPendingRequestForSalida(box.id, dateStr, box.centerCode);
                     const isLocked = !!pendingReq;
 
@@ -452,13 +463,6 @@ function renderMonthlyCalendar() {
 
         </div>
         `;
-    }
-
-    // Celdas vacías al final si hicieran falta
-    const totalRendered = startDayOfWeek + daysInMonth;
-    const remainingSlots = (7 - (totalRendered % 7)) % 7;
-    for (let i = 0; i < remainingSlots; i++) {
-        html += `<div class="bg-slate-50/40 min-h-[110px] md:min-h-[130px] p-1.5"></div>`;
     }
 
     html += `
