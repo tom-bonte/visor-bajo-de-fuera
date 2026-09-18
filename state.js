@@ -38,11 +38,6 @@ let currentUserKey = 'guest';
 /** Indicador de modo consulta sin autenticar. */
 let isGuestMode = true;
 
-/** Pestaña activa en el modal de operaciones: 'ceder' | 'liberar' | 'coger' | 'pedir'. */
-let activeOperationTab = 'ceder';
-
-/** Contexto del día/centro seleccionado al abrir el modal de operaciones. */
-let activeOperationContext = null;
 
 /** Paginación y filtros del Historial */
 let historyCurrentPage = 1;
