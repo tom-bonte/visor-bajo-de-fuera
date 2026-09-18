@@ -370,8 +370,9 @@ async function executeTransfer(dateStr, fromCenterCode, toCenterCode, slots, not
         }
 
         const balanceTo = getCenterBalance(toCenterCode, dayData);
-        if (balanceTo.effectiveSlots + slots > MAX_BOAT_CAP) {
-            throw new Error(`El centro receptor superaría el límite de ${MAX_BOAT_CAP} plazas por barco (${balanceTo.effectiveSlots} + ${slots} = ${balanceTo.effectiveSlots + slots}).`);
+        const dayCap = getDayQuota(dateStr, dayData);
+        if (balanceTo.effectiveSlots + slots > dayCap) {
+            throw new Error(`El centro receptor superaría el cupo diario de ${dayCap} plazas (${balanceTo.effectiveSlots} + ${slots} = ${balanceTo.effectiveSlots + slots}).`);
         }
 
         const transferObj = {
@@ -519,8 +520,9 @@ async function executeClaimFromPool(dateStr, centerCode, slots) {
         }
 
         const balance = getCenterBalance(centerCode, dayData);
-        if (balance.effectiveSlots + slots > MAX_BOAT_CAP) {
-            throw new Error(`Superarías el tope de ${MAX_BOAT_CAP} plazas por barco. Tienes ${balance.effectiveSlots} plazas y pretendes coger ${slots} (${balance.effectiveSlots + slots} plazas).`);
+        const dayCap = getDayQuota(dateStr, dayData);
+        if (balance.effectiveSlots + slots > dayCap) {
+            throw new Error(`Superarías el cupo diario de ${dayCap} plazas. Tienes ${balance.effectiveSlots} plazas y pretendes coger ${slots} (${balance.effectiveSlots + slots} plazas).`);
         }
 
         newTotalSlots = balance.effectiveSlots + slots;
@@ -556,7 +558,7 @@ async function executeClaimFromPool(dateStr, centerCode, slots) {
               `📅 *Fecha:* ${dateFormatted}\n` +
               `🎯 *Centro:* ${centerEmoji} ${centerName}\n` +
               `🎟️ *Plazas añadidas:* +${slots} plazas\n` +
-              `⛵ *Total Barco:* ${newTotalSlots}/${MAX_BOAT_CAP} plazas`;
+              `⛵ *Total Plazas Centro:* ${newTotalSlots} plazas`;
 
     if (currentUserKey !== 'admin') {
         await sendBdfWebhook(msg);

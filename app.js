@@ -257,7 +257,7 @@ function openNewSalidaModal(dateStr, targetCenterCode = null) {
     }
 
     const dObj = parseDateT00(dateStr);
-    const allowedMax = Math.min(MAX_BOAT_CAP, remainingCapacity);
+    const allowedMax = remainingCapacity;
     pendingNewSalida = { date: dateStr, targetCenterCode: targetCenter, remainingCapacity, dayCap };
 
     getEl('new-salida-title').textContent = `Bajo de Fuera · ${formatDateShort(dObj)}`;
@@ -307,10 +307,6 @@ function confirmNewSalida() {
         showToast('Error', 'Introduce un número válido de plazas.', true);
         return;
     }
-    if (pax > MAX_BOAT_CAP) {
-        showToast('Límite excedido', `El máximo permitido es de ${MAX_BOAT_CAP} plazas por barco.`, true);
-        return;
-    }
 
     // Verificar cupo restante en tiempo real
     const dayData = monthDaysCache[date] || null;
@@ -320,6 +316,10 @@ function confirmNewSalida() {
 
     if (currentRemaining <= 0) {
         showNotification('Cupo Lleno', `El cupo diario de ${maxDayCap} plazas ya está completo para este día.`, true);
+        return;
+    }
+    if (pax > currentRemaining) {
+        showToast('Límite excedido', `Solo quedan ${currentRemaining} plazas disponibles para este día (cupo: ${maxDayCap}).`, true);
         return;
     }
 
@@ -586,7 +586,7 @@ function openEditSalidaModal(dateStr, salidaId, centerCode) {
     const dayCap = getDayQuota(dateStr, dayData);
     const freeSpots = Math.max(0, dayCap - summary.totalOccupied);
     const availableForThisBoat = currentPax + freeSpots;
-    const allowedMax = Math.min(MAX_BOAT_CAP, availableForThisBoat);
+    const allowedMax = availableForThisBoat;
 
     pendingEditSalida = {
         dateStr,
@@ -639,10 +639,6 @@ function confirmEditSalida() {
     const pax = parseInt(getEl('edit-salida-pax').value, 10);
     if (!pax || isNaN(pax) || pax <= 0) {
         showNotification('Error', 'Introduce un número válido de plazas.', true);
-        return;
-    }
-    if (pax > MAX_BOAT_CAP) {
-        showNotification('Límite excedido', `El máximo permitido es de ${MAX_BOAT_CAP} plazas por barco.`, true);
         return;
     }
 

@@ -879,7 +879,7 @@ function renderHistoryView() {
                 } else if (type === 'claim') {
                     title = 'Plazas del Pool';
                     icon = '📥';
-                    desc = `<b>${cName}</b> tomó <b>${d.slots} plazas</b> del fondo común (${d.date}). Barco: ${d.totalEffective || '—'}/12 plazas.`;
+                    desc = `<b>${cName}</b> tomó <b>${d.slots} plazas</b> del fondo común (${d.date}). Total centro: ${d.totalEffective || '—'} plazas.`;
                     badgeClass = 'bg-emerald-100 text-emerald-800';
                 } else if (type === 'admin_quota') {
                     title = 'Ajuste de Cupo';

@@ -305,7 +305,7 @@
             </p>
 
             <label class="block text-xs font-bold text-slate-700 mb-1">Modificar plazas:</label>
-            <input type="number" id="edit-salida-pax" min="1" max="12"
+            <input type="number" id="edit-salida-pax" min="1" max="30"
                 class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 font-mono text-lg font-bold text-slate-800"
                 onkeydown="if(event.key === 'Enter') { event.preventDefault(); confirmEditSalida(); }">
 
@@ -378,7 +378,7 @@
                 </label>
 
                 <div id="cesion-pax-container" class="pl-6">
-                    <input type="number" id="cesion-directa-pax" min="1" max="12" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold text-slate-800 text-sm" placeholder="Ej: 4">
+                    <input type="number" id="cesion-directa-pax" min="1" max="30" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold text-slate-800 text-sm" placeholder="Ej: 4">
                 </div>
 
                 <label class="flex items-center gap-2.5 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
@@ -440,7 +440,7 @@
                 </label>
 
                 <div id="donation-pax-container" class="pl-7">
-                    <input type="number" id="donation-pax" min="1" max="12" class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-800" placeholder="Ej: 2">
+                    <input type="number" id="donation-pax" min="1" max="30" class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-800" placeholder="Ej: 2">
                 </div>
 
                 <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
@@ -496,7 +496,7 @@
 
             <div id="new-salida-pax-container" class="mb-4">
                 <label class="block text-xs font-bold text-slate-700 mb-1">¿Cuántas plazas necesitas?</label>
-                <input type="number" id="new-salida-pax" min="1" max="12"
+                <input type="number" id="new-salida-pax" min="1" max="30"
                     class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-lg font-bold text-slate-800"
                     placeholder="Ej: 8"
                     onkeydown="if(event.key === 'Enter') { event.preventDefault(); confirmNewSalida(); }">
@@ -770,7 +770,7 @@
                 <ul class="list-disc pl-5 space-y-1">
                     <li><b>Ceder Plazas:</b> Cede plazas de tu centro a otro centro colaborador.</li>
                     <li><b>Liberar al Pool:</b> Si no vas a llenar el barco, libera plazas al fondo común del día.</li>
-                    <li><b>Coger del Pool:</b> Si hay plazas libres en el fondo común, tómalas para tu barco (hasta máx. 12 plazas por barco).</li>
+                    <li><b>Coger del Pool:</b> Si hay plazas libres en el fondo común, tómalas para tu centro (hasta el cupo diario disponible).</li>
                     <li><b>Pedir Plazas:</b> Envía una solicitud o notificación de plazas a otro centro.</li>
                 </ul>
                 <p><b>3. Filtro de Centros:</b> Utiliza el menú "FILTRO: TODOS LOS CENTROS" arriba a la izquierda para activar o desactivar centros en el calendario.</p>
@@ -898,13 +898,13 @@
     </div>
 
     <!-- Carga de Scripts -->
-    <script src="config.js?v=4.4"></script>
-    <script src="utils.js?v=4.4"></script>
-    <script src="state.js?v=4.4"></script>
-    <script src="firebase-service.js?v=4.4"></script>
-    <script src="export.js?v=4.4"></script>
-    <script src="ui.js?v=4.4"></script>
-    <script src="app.js?v=4.4"></script>
+    <script src="config.js?v=4.5"></script>
+    <script src="utils.js?v=4.5"></script>
+    <script src="state.js?v=4.5"></script>
+    <script src="firebase-service.js?v=4.5"></script>
+    <script src="export.js?v=4.5"></script>
+    <script src="ui.js?v=4.5"></script>
+    <script src="app.js?v=4.5"></script>
 
 </body>
 </html>

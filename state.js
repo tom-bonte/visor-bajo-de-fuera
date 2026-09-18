@@ -196,11 +196,8 @@ function getDaySalidas(dayData, dateStr = '') {
 }
 
 /**
- * Genera las cajas visuales de máximo 12 plazas para el calendario (Section 0).
- * Las cajas son de solo visualización. No son registros separados.
- * - Hasta 12 plazas = 1 caja.
- * - 13–24 plazas = 2 cajas (ej. 20 = caja de 12 + caja de 8).
- * - 25–36 plazas = 3 cajas, etc.
+ * Genera las cajas visuales para el calendario (1 caja única por centro con el total de sus plazas).
+ * Un centro puede tener tantas plazas como cupo disponible haya (hasta 13 o 30).
  * @param {Object} schoolRecord - { date, centerCode, plazas, pax, ... }
  * @returns {Array<Object>} Lista de cajas de visualización con { boxPax, totalPlazas, boxIndex, totalBoxes, isMultiBox }
  */
@@ -208,26 +205,14 @@ function getSchoolDisplayBoxes(schoolRecord) {
     const total = Number(schoolRecord.plazas !== undefined ? schoolRecord.plazas : schoolRecord.pax) || 0;
     if (total <= 0) return [];
 
-    const boxes = [];
-    let remaining = total;
-    let boxIndex = 0;
-    const totalBoxes = Math.ceil(total / 12);
-
-    while (remaining > 0) {
-        const boxPax = Math.min(remaining, 12);
-        boxes.push({
-            ...schoolRecord,
-            boxPax,
-            totalPlazas: total,
-            boxIndex,
-            totalBoxes,
-            isMultiBox: totalBoxes > 1
-        });
-        remaining -= boxPax;
-        boxIndex++;
-    }
-
-    return boxes;
+    return [{
+        ...schoolRecord,
+        boxPax: total,
+        totalPlazas: total,
+        boxIndex: 0,
+        totalBoxes: 1,
+        isMultiBox: false
+    }];
 }
 
 /**

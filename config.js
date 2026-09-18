@@ -66,16 +66,16 @@ const getOfficialDailyCapacity = getDayQuota;
  */
 function getMonthQuotaLabel(month) {
     if (month >= 5 && month <= 8) {
-        return "Cupo: 30 plazas/día · Máx 12/barco";
+        return "Cupo: 30 plazas/día";
     }
     if (month === 9) {
-        return "Cupo: 13 plazas/día · 30 fines de semana hasta el 15/10 · Máx 12/barco";
+        return "Cupo: 13 plazas/día · 30 fines de semana hasta el 15/10";
     }
-    return "Cupo: 13 plazas/día · Máx 12/barco";
+    return "Cupo: 13 plazas/día";
 }
 
-/** @constant {number} Capacidad máxima recomendada de buceadores por barco en boya. */
-const MAX_BOAT_CAP = 12;
+/** @constant {number} Capacidad máxima de buceadores por centro o día. */
+const MAX_BOAT_CAP = 30;
 
 /**
  * @constant {Object}
