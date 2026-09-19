@@ -136,8 +136,8 @@ function getWeekNumber(d) {
 }
 
 /**
- * Normaliza nombres o códigos de centros a la clave oficial ('B', 'H', 'M', 'N', 'P', 'D', 'C', 'X').
- * Soporta 'Balky', 'Moondive' -> 'B', 'Divers' -> 'D', etc.
+ * Normaliza nombres o códigos de centros a la clave oficial ('MD', 'H', 'M', 'N', 'P', 'D', 'C', 'X').
+ * Soporta 'Moondive' -> 'MD', 'Divers' -> 'D', etc.
  */
 function normalizeCenterCode(val) {
     if (!val) return null;
@@ -145,7 +145,7 @@ function normalizeCenterCode(val) {
     if (CENTERS[str]) return str;
 
     const clean = str.toLowerCase().replace(/[\-_]/g, ' ');
-    if (clean === 'b' || clean.includes('balky') || clean.includes('moondive') || clean === 'md') return 'MD';
+    if (clean === 'md' || clean.includes('moondive')) return 'MD';
     if (clean === 'h' || clean.includes('hormiga')) return 'H';
     if (clean === 'm' || clean.includes('mangamar')) return 'M';
     if (clean === 'n' || clean.includes('naranjito')) return 'N';
@@ -158,13 +158,13 @@ function normalizeCenterCode(val) {
 }
 
 /**
- * Normaliza el código de centro mapeando 'B' a 'MD'.
+ * Normaliza y devuelve el código de centro estandarizado.
  * @param {string} code
  * @returns {string}
  */
 function normCenter(code) {
     if (!code) return '';
-    return (code === 'B' || code === 'MD') ? 'MD' : code;
+    return String(code).trim().toUpperCase();
 }
 
 

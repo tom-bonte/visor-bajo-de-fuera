@@ -32,7 +32,7 @@ let historyLogs = [];
 /** Lista de solicitudes pendientes (intercambios y peticiones) en tiempo real. */
 let bdfRequests = [];
 
-/** Clave del usuario autenticado ('admin', 'mangamar', 'balky', etc., o 'guest'). */
+/** Clave del usuario autenticado ('admin', 'mangamar', 'moondive', etc., o 'guest'). */
 let currentUserKey = 'guest';
 
 /** Indicador de modo consulta sin autenticar. */
@@ -85,9 +85,6 @@ function getCenterBalance(centerCode, dayData) {
 
     const allocations = dayData.allocations || {};
     let initialSlots = (allocations[centerCode] && allocations[centerCode].initialSlots) || 0;
-    if (initialSlots === 0 && centerCode === 'MD' && allocations['B']) {
-        initialSlots = allocations['B'].initialSlots || 0;
-    }
 
     const isMatch = c => normCenter(c) === normTarget;
 

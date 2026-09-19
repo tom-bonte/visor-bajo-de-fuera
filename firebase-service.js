@@ -128,12 +128,6 @@ function listenMonthOverview(startDateOrYear, endDateOrMonth) {
         .onSnapshot((snapshot) => {
             snapshot.forEach(doc => {
                 const d = doc.data() || {};
-                if (d.allocations && d.allocations['B']) {
-                    if (!d.allocations['MD']) {
-                        d.allocations['MD'] = d.allocations['B'];
-                    }
-                    delete d.allocations['B'];
-                }
                 monthDaysCache[doc.id] = { id: doc.id, date: doc.id, ...d };
             });
             renderAll();
@@ -157,10 +151,6 @@ async function ensureDayInCache(dateStr) {
         const docSnap = await db.collection(BDF_COLLECTIONS.DAYS).doc(dateStr).get();
         if (docSnap.exists) {
             const d = docSnap.data() || {};
-            if (d.allocations && d.allocations['B']) {
-                if (!d.allocations['MD']) d.allocations['MD'] = d.allocations['B'];
-                delete d.allocations['B'];
-            }
             monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: dayCap, ...d };
         } else {
             monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: dayCap, salidas: [], allocations: {} };
@@ -480,14 +470,6 @@ async function rejectBdfRequest(requestId) {
 /* =========================================================================
    TRANSACCIONES Y OPERACIONES DE PLAZAS
    ========================================================================= */
-
-/**
- * Ejecuta una Cesión Directa de plazas del Centro A al Centro B.
- * @param {string} dateStr - 'YYYY-MM-DD'
- * @param {string} fromCenterCode - 'B', 'M', etc.
- * @param {string} toCenterCode - 'B', 'M', etc.
- * @param {number} slots - Cantidad de plazas a transferir
-
 
 /**
  * Genera un ID único para una salida independiente.
@@ -1108,7 +1090,7 @@ async function executeSpotTransferSalidas(dateStr, givingSalidaId, fromCenter, t
  * Guarda o actualiza la asignación inicial del día (administrador).
  * @param {string} dateStr
  * @param {number} totalQuota
- * @param {Object} allocations - { 'B': { initialSlots: 8 }, 'M': { initialSlots: 8 }, ... }
+ * @param {Object} allocations - { 'MD': { initialSlots: 8 }, 'M': { initialSlots: 8 }, ... }
  */
 async function adminSaveDayAllocations(dateStr, totalQuota, allocations) {
     if (currentUserKey !== 'admin') throw new Error("Solo el administrador puede configurar cupos del sorteo.");
@@ -1131,7 +1113,7 @@ async function adminSaveDayAllocations(dateStr, totalQuota, allocations) {
 
 /**
  * Importa masivamente las asignaciones de cuadrante desde CSV a Firestore en lotes seguros.
- * @param {Object} daysMap - { 'YYYY-MM-DD': { 'B': { initialSlots: 8 }, 'M': { initialSlots: 8 } } }
+ * @param {Object} daysMap - { 'YYYY-MM-DD': { 'MD': { initialSlots: 8 }, 'M': { initialSlots: 8 } } }
  * @param {boolean} overwrite - Si sobreescribe o mezcla las asignaciones
  */
 async function executeImportCsvSchedule(daysMap, overwrite = true, salidasMap = null) {

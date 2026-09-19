@@ -92,14 +92,6 @@ const CENTERS = {
     'X': { key: 'xlm', name: 'X La Manga', emoji: '⚪', color: 'bg-[#cbd5e1]', text: 'text-slate-800', hex: '#cbd5e1', pastelBg: 'bg-slate-50', pastelBorder: 'border-slate-200' }
 };
 
-// Aliasing retrocompatible para 'B' sin duplicarlo en iteraciones de centros
-Object.defineProperty(CENTERS, 'B', {
-    value: CENTERS['MD'],
-    enumerable: false,
-    configurable: true,
-    writable: true
-});
-
 /**
  * Mapeo entre usuarios de autenticación y correos pseudo-locales de Firebase Auth.
  */
@@ -107,7 +99,6 @@ const EMAIL_MAP = {
     'admin': 'admin@visor.local',
     'mangamar': 'mangamar@visor.local',
     'moondive': 'moondive@visor.local',
-    'balky': 'moondive@visor.local',
     'hormigas': 'hormigas@visor.local',
     'naranjito': 'naranjito@visor.local',
     'planeta': 'planeta@visor.local',
@@ -121,7 +112,6 @@ const EMAIL_MAP = {
  */
 const USER_CENTER_KEYS = {
     'moondive': 'MD',
-    'balky': 'MD',
     'hormigas': 'H',
     'mangamar': 'M',
     'naranjito': 'N',
@@ -136,7 +126,6 @@ const USER_CENTER_KEYS = {
  */
 const CENTER_TO_USER_KEY = {
     'MD': 'moondive',
-    'B': 'moondive',
     'H': 'hormigas',
     'M': 'mangamar',
     'N': 'naranjito',
@@ -153,7 +142,6 @@ const BADGE_INFO = {
     'admin': { name: 'Admin Root', color: 'bg-slate-800', text: 'text-white', initial: 'A' },
     'mangamar': { name: 'Mangamar', color: 'bg-[#22c55e]', text: 'text-white', initial: 'M' },
     'moondive': { name: 'Moondive', color: 'bg-[#ef4444]', text: 'text-white', initial: 'MD' },
-    'balky': { name: 'Moondive', color: 'bg-[#ef4444]', text: 'text-white', initial: 'MD' },
     'hormigas': { name: 'Islas Hormigas', color: 'bg-[#0f172a]', text: 'text-white', initial: 'H' },
     'naranjito': { name: 'Naranjito', color: 'bg-[#fbbf24]', text: 'text-slate-900', initial: 'N' },
     'planeta': { name: 'Planeta Azul', color: 'bg-[#3b82f6]', text: 'text-white', initial: 'P' },

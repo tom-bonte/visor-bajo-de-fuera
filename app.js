@@ -795,7 +795,7 @@ function openCesionDirectaModal(dateStr, salidaId, fromCenterCode, currentPax) {
     const select = getEl('cesion-directa-target-center');
     if (select) {
         select.innerHTML = Object.keys(CENTERS)
-            .filter(code => code !== fromCenterCode && code !== 'B')
+            .filter(code => code !== fromCenterCode)
             .map(code => `<option value="${code}">${CENTERS[code].name}</option>`)
             .join('');
     }

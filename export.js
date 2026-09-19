@@ -9,7 +9,7 @@
  * Estilos y colores para renderizar badges y bloques de centros en el PDF vectorial.
  */
 const PDF_CENTER_STYLES = {
-    'B': { bg: '#ef4444', text: '#ffffff' },
+    'MD': { bg: '#ef4444', text: '#ffffff' },
     'H': { bg: '#0f172a', text: '#ffffff' },
     'M': { bg: '#16a34a', text: '#ffffff' },
     'N': { bg: '#fbbf24', text: '#0f172a' },
