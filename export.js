@@ -132,6 +132,51 @@ async function backupAllToCSV() {
 }
 
 /**
+ * Realiza una copia de seguridad completa de la temporada descargando un archivo JSON.
+ * Solo disponible para el Administrador.
+ */
+async function downloadJsonBackup() {
+    try {
+        showToast('Generando Backup JSON', 'Descargando todos los días registrados en Bajo de Fuera...');
+        const snapshot = await db.collection(BDF_COLLECTIONS.DAYS).get();
+        const daysData = {};
+        snapshot.forEach(doc => {
+            daysData[doc.id] = doc.data();
+        });
+
+        const totalDays = Object.keys(daysData).length;
+        if (totalDays === 0) {
+            showToast('Sin Datos', 'No hay registros en la base de datos para exportar.', true);
+            return;
+        }
+
+        const backupPayload = {
+            appName: 'Visor Bajo de Fuera',
+            version: '6.0',
+            exportedAt: new Date().toISOString(),
+            totalDays: totalDays,
+            days: daysData
+        };
+
+        const jsonStr = JSON.stringify(backupPayload, null, 2);
+        const todayStr = getStrYMD(new Date());
+        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bdf_backup_${todayStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Backup JSON Descargado', `Se han exportado ${totalDays} días con éxito.`);
+    } catch (err) {
+        console.error("Error al exportar JSON:", err);
+        showToast('Error de Exportación', 'No se pudo generar el archivo JSON: ' + err.message, true);
+    }
+}
+
+/**
  * Recupera los datos de los días para la exportación desde Firestore o caché local.
  * @param {string} monthVal - 'all' o índice del mes ('0'..'11')
  * @returns {Promise<Array<Object>>}

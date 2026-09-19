@@ -6,13 +6,32 @@
 /** Shorthand document.getElementById */
 const getEl = id => document.getElementById(id);
 
-/** Oculta un elemento añadiendo 'hidden' */
+/** Conjunto de IDs de modales actualmente abiertos para control de scroll del fondo */
+const activeOpenModals = new Set();
+
+function lockBodyScroll(id) {
+    if (id) activeOpenModals.add(id);
+    if (activeOpenModals.size > 0) {
+        document.body.classList.add('overflow-hidden');
+    }
+}
+
+function unlockBodyScroll(id) {
+    if (id) activeOpenModals.delete(id);
+    if (activeOpenModals.size === 0) {
+        document.body.classList.remove('overflow-hidden');
+    }
+}
+
 /** Oculta un elemento añadiendo 'hidden' y forzando display none */
 const hideEl = id => {
     const el = getEl(id);
     if (!el) return;
     el.classList.add('hidden');
     el.style.display = 'none';
+    if (id && id.includes('modal')) {
+        unlockBodyScroll(id);
+    }
 };
 
 /** Muestra un elemento quitando 'hidden' y restaurando display */
@@ -24,6 +43,9 @@ const showEl = id => {
         el.style.display = 'flex';
     } else {
         el.style.display = '';
+    }
+    if (id && id.includes('modal')) {
+        lockBodyScroll(id);
     }
 };
 
@@ -102,6 +124,39 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+/**
+ * Sanitiza y limita la longitud de una nota a un máximo estricto (por defecto 150 caracteres).
+ * @param {string} str
+ * @param {number} [maxLen=150]
+ * @returns {string}
+ */
+function sanitizeNote(str, maxLen = 150) {
+    if (str === null || str === undefined) return '';
+    const trimmed = String(str).trim();
+    return trimmed.length > maxLen ? trimmed.substring(0, maxLen) : trimmed;
+}
+
+/**
+ * Actualiza dinámicamente el contador visual de caracteres de un input/textarea.
+ * @param {string} inputId
+ * @param {string} counterId
+ * @param {number} [maxLen=150]
+ */
+function updateNoteCounter(inputId, counterId, maxLen = 150) {
+    const input = getEl(inputId);
+    const counter = getEl(counterId);
+    if (!input || !counter) return;
+    const len = input.value ? input.value.length : 0;
+    counter.textContent = `${len} / ${maxLen}`;
+    if (len >= maxLen) {
+        counter.classList.add('text-red-500', 'font-bold');
+        counter.classList.remove('text-slate-400');
+    } else {
+        counter.classList.remove('text-red-500', 'font-bold');
+        counter.classList.add('text-slate-400');
+    }
 }
 
 /**

@@ -80,6 +80,7 @@ function toggleUserMenu(e) {
 }
 
 function openHelpModal() {
+    renderHelpModalContent();
     showEl('help-modal');
 }
 
@@ -143,6 +144,11 @@ function changeMonth(delta) {
         currentYear += 1;
     }
 
+    if (activeViewMode === 'historial') {
+        activeViewMode = 'mensual';
+    }
+    expandedYears[currentYear] = true;
+
     currentDate = new Date(currentYear, currentMonth, 1);
     refreshRangeListener();
     renderAll();
@@ -157,6 +163,19 @@ function goToCurrentMonth() {
     expandedYears[2026] = true;
     refreshRangeListener();
     renderAll();
+
+    // Resaltar visualmente la celda del día de hoy con animación de pulso
+    setTimeout(() => {
+        const todayStr = getStrYMD(new Date());
+        const cell = document.querySelector(`[data-date="${todayStr}"]`);
+        if (cell) {
+            cell.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            cell.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+            setTimeout(() => {
+                cell.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+            }, 2000);
+        }
+    }, 120);
 }
 
 /* =========================================================================
@@ -264,6 +283,12 @@ function openNewSalidaModal(dateStr, targetCenterCode = null) {
     paxInput.value = Math.min(10, allowedMax);
     paxInput.max = allowedMax;
 
+    const noteInput = getEl('new-salida-note');
+    if (noteInput) {
+        noteInput.value = '';
+        updateNoteCounter('new-salida-note', 'new-salida-note-counter', 150);
+    }
+
     const isAdmin = currentUserKey === 'admin';
     const centerSelector = getEl('new-salida-center-container');
     const paxContainer = getEl('new-salida-pax-container');
@@ -331,10 +356,11 @@ function confirmNewSalida() {
     const centerCode = USER_CENTER_KEYS[targetCenterKey] || 'M';
     const centerInfo = CENTERS[centerCode] || { name: targetCenterKey, emoji: '⛵' };
     const dObj = parseDateT00(date);
+    const note = sanitizeNote(getEl('new-salida-note')?.value || '');
 
     // Para el Administrador: NO pedir confirmación y NO enviar a WhatsApp
     if (currentUserKey === 'admin') {
-        executeAddSalida(date, centerCode, pax)
+        executeAddSalida(date, centerCode, pax, note)
             .then(() => {
                 showToast('Salida añadida', `Añadidas ${pax} plazas para ${centerInfo.name}.`);
             })
@@ -345,11 +371,11 @@ function confirmNewSalida() {
         return;
     }
 
-    const msg = `🤖 *AVISO AUTOMÁTICO*\n➕ *NUEVA SALIDA* - ${centerInfo.emoji} ${centerInfo.name}\nPara el ${dObj.getDate()} de ${MONTHS_ES[dObj.getMonth()].toUpperCase()}, añadió una salida a *Bajo de Fuera* de ${pax} plazas.`;
+    const msg = `🤖 *AVISO AUTOMÁTICO*\n➕ *NUEVA SALIDA* - ${centerInfo.emoji} ${centerInfo.name}\nPara el ${dObj.getDate()} de ${MONTHS_ES[dObj.getMonth()].toUpperCase()}, añadió una salida a *Bajo de Fuera* de ${pax} plazas.${note ? `\n📝 _"${note}"_` : ''}`;
 
     triggerWhatsAppConfirm("Nueva Salida", msg, async () => {
         try {
-            await executeAddSalida(date, centerCode, pax);
+            await executeAddSalida(date, centerCode, pax, note);
             sendBdfWebhook(msg).catch(console.error);
             showToast('Salida añadida', `Añadidas ${pax} plazas para ${centerInfo.name}.`);
         } catch (err) {
@@ -614,7 +640,10 @@ function openEditSalidaModal(dateStr, salidaId, centerCode) {
     paxInput.max = allowedMax;
 
     const noteInput = getEl('edit-salida-note');
-    if (noteInput) noteInput.value = pendingEditSalida.itemNote;
+    if (noteInput) {
+        noteInput.value = pendingEditSalida.itemNote;
+        updateNoteCounter('edit-salida-note', 'edit-salida-note-counter', 150);
+    }
 
     const centerSelector = getEl('edit-salida-center-container');
     if (centerSelector) {
@@ -672,7 +701,7 @@ function confirmEditSalida() {
         return;
     }
 
-    const note = getEl('edit-salida-note')?.value || '';
+    const note = sanitizeNote(getEl('edit-salida-note')?.value || '');
     const newCenterCode = currentUserKey === 'admin' ? getEl('edit-salida-center').value : pendingEditSalida.centerCode;
     const centerInfo = CENTERS[newCenterCode] || { name: newCenterCode, emoji: '⛵' };
     const dObj = parseDateT00(dateStr);
@@ -806,7 +835,11 @@ function openCesionDirectaModal(dateStr, salidaId, fromCenterCode, currentPax) {
 
     getEl('cesion-type-partial').checked = true;
     getEl('cesion-pax-container').classList.remove('hidden');
-    getEl('cesion-directa-note').value = '';
+    const cesionNote = getEl('cesion-directa-note');
+    if (cesionNote) {
+        cesionNote.value = '';
+        updateNoteCounter('cesion-directa-note', 'cesion-directa-note-counter', 150);
+    }
 
     showEl('cesion-directa-modal');
 }
@@ -828,7 +861,7 @@ function confirmCesionDirecta() {
     }
 
     const targetCenter = getEl('cesion-directa-target-center').value;
-    const note = getEl('cesion-directa-note').value || '';
+    const note = sanitizeNote(getEl('cesion-directa-note')?.value || '');
     const spotsToGive = isFull ? currentPax : pax;
 
     hideEl('cesion-directa-modal');
@@ -1883,11 +1916,78 @@ document.addEventListener('click', function (e) {
     }
 });
 
+// Navegación de mes con teclado (flechas izquierda y derecha)
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+
+    // Ignorar si el usuario está escribiendo en un input, textarea, select o elemento editable
+    const activeEl = document.activeElement;
+    if (activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.isContentEditable
+    )) {
+        return;
+    }
+
+    // Ignorar si hay algún modal visible / abierto
+    const openModal = document.querySelector('.fixed.inset-0:not(.hidden)');
+    if (openModal && window.getComputedStyle(openModal).display !== 'none') {
+        return;
+    }
+
+    if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        changeMonth(-1);
+    } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        changeMonth(1);
+    }
+});
+
+// Monitor de Estado de Conexión de Red (Online / Offline)
+function initNetworkStatusMonitor() {
+    const banner = getEl('network-status-banner');
+    const dot = getEl('network-status-dot');
+    const text = getEl('network-status-text');
+    if (!banner || !dot || !text) return;
+
+    let hideTimer = null;
+
+    function updateNetworkStatus(isOnline) {
+        if (hideTimer) clearTimeout(hideTimer);
+
+        if (!isOnline) {
+            banner.className = "fixed top-3 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none transition-all duration-300 transform translate-y-0 opacity-100 flex items-center gap-2 px-4 py-2 rounded-full text-xs font-black shadow-lg border bg-amber-900/95 text-amber-100 border-amber-600/50 backdrop-blur-md";
+            dot.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+            text.textContent = "Sin conexión a Internet — Modo lectura (datos locales)";
+        } else {
+            banner.className = "fixed top-3 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none transition-all duration-300 transform translate-y-0 opacity-100 flex items-center gap-2 px-4 py-2 rounded-full text-xs font-black shadow-lg border bg-emerald-900/95 text-emerald-100 border-emerald-600/50 backdrop-blur-md";
+            dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
+            text.textContent = "Conexión restablecida — Sincronizando datos";
+
+            hideTimer = setTimeout(() => {
+                banner.classList.add('-translate-y-16', 'opacity-0');
+                banner.classList.remove('translate-y-0', 'opacity-100');
+            }, 3000);
+        }
+    }
+
+    window.addEventListener('online', () => updateNetworkStatus(true));
+    window.addEventListener('offline', () => updateNetworkStatus(false));
+
+    if (!navigator.onLine) {
+        updateNetworkStatus(false);
+    }
+}
+
 // Inicialización inmediata al cargar
 refreshRangeListener();
 listenHistoryLogs();
 listenBdfRequests();
 renderAll();
+initNetworkStatusMonitor();
 if (typeof scrubLegacyAutoNotes === 'function') {
     scrubLegacyAutoNotes();
 }

@@ -233,6 +233,8 @@ function getSchoolDisplayBoxes(schoolRecord) {
  */
 function getPendingRequestForSalida(salidaId, dateStr = '', centerCode = '') {
     if (!bdfRequests || bdfRequests.length === 0) return null;
+    const todayStr = getStrYMD(new Date());
+    if (dateStr && dateStr < todayStr) return null;
     const normCode = normCenter(centerCode);
     
     return bdfRequests.find(r => {

@@ -30,7 +30,6 @@ function renderAll() {
 function renderHeader() {
     const isGuest = isGuestMode;
     const btnLoginHeader = getEl('btn-login-header');
-    const btnLoginMobile = getEl('btn-login-mobile');
     const userMenuWrapper = getEl('user-menu-wrapper');
     const userDropdown = getEl('user-dropdown');
 
@@ -39,17 +38,16 @@ function renderHeader() {
     const tabStats = getEl('tab-estadisticas');
     if (tabMensual) {
         tabMensual.className = activeViewMode === 'mensual' 
-            ? "px-3 md:px-5 py-1.5 md:py-2 tab-active flex items-center gap-1.5 transition-all whitespace-nowrap"
-            : "px-3 md:px-5 py-1.5 md:py-2 tab-inactive flex items-center gap-1.5 transition-all whitespace-nowrap";
+            ? "px-2.5 sm:px-3 md:px-4 py-1.5 tab-active flex items-center gap-1.5 transition-all whitespace-nowrap"
+            : "px-2.5 sm:px-3 md:px-4 py-1.5 tab-inactive flex items-center gap-1.5 transition-all whitespace-nowrap";
     }
     if (tabStats) {
         tabStats.className = activeViewMode === 'estadisticas'
-            ? "px-3 md:px-5 py-1.5 md:py-2 tab-active flex items-center gap-1.5 transition-all whitespace-nowrap"
-            : "px-3 md:px-5 py-1.5 md:py-2 tab-inactive flex items-center gap-1.5 transition-all whitespace-nowrap";
+            ? "px-2.5 sm:px-3 md:px-4 py-1.5 tab-active flex items-center gap-1.5 transition-all whitespace-nowrap"
+            : "px-2.5 sm:px-3 md:px-4 py-1.5 tab-inactive flex items-center gap-1.5 transition-all whitespace-nowrap";
     }
 
     if (btnLoginHeader) btnLoginHeader.classList.toggle('hidden', !isGuest);
-    if (btnLoginMobile) btnLoginMobile.classList.toggle('hidden', !isGuest);
     if (userMenuWrapper) userMenuWrapper.classList.toggle('hidden', isGuest);
 
     // Actualizar badge del usuario
@@ -61,7 +59,7 @@ function renderHeader() {
     if (badgeInitialEl) badgeInitialEl.innerText = badgeInfo.initial;
     if (badgeNameEl) badgeNameEl.innerText = badgeInfo.name;
     if (userBadgeBtn) {
-        userBadgeBtn.className = `rounded-[4px] px-2 py-1 md:px-3 md:py-2 text-[9px] md:text-[10px] font-bold shadow-sm flex items-center gap-1.5 md:gap-2 hover:opacity-90 transition-opacity ${badgeInfo.color} ${badgeInfo.text}`;
+        userBadgeBtn.className = `rounded-lg px-2 py-1 md:px-3 md:py-2 text-[9px] md:text-[10px] font-bold shadow-sm flex items-center gap-1.5 md:gap-2 hover:opacity-90 transition-opacity ${badgeInfo.color} ${badgeInfo.text}`;
     }
 
     // Actualizar notificaciones pendientes para el centro
@@ -88,6 +86,7 @@ function renderHeader() {
         }
 
         if (currentUserKey === 'admin') {
+            html += `<button onclick="downloadJsonBackup(); toggleUserMenu();" class="text-left px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Descargar Copia JSON</button>`;
             html += `<button onclick="triggerImport(); toggleUserMenu();" class="text-left px-4 py-2.5 text-sm font-bold text-blue-700 hover:bg-blue-50 transition-colors flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg> Importar CSV</button>`;
             html += `<button onclick="promptEmptyData(); toggleUserMenu();" class="text-left px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> Vaciar Datos</button><div class="h-px bg-slate-100 my-1"></div>`;
         }
@@ -277,23 +276,72 @@ function renderMonthlyCalendar() {
         myCenterCode = USER_CENTER_KEYS[currentUserKey] || null;
     }
 
+    const today = new Date();
+    const isCurrentCalendarMonth = (today.getFullYear() === currentYear && today.getMonth() === currentMonth);
+
     let html = `
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
         
-        <!-- Cabecera del Mes en el Calendario -->
-        <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <!-- Barra de Navegación Móvil (Solo en Móvil) -->
+        <div class="md:hidden p-2 bg-slate-50 border-b border-slate-200">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="flex items-center gap-1.5">
+                    <button onclick="changeMonth(-1)" title="Mes anterior" class="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 active:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition-colors cursor-pointer shadow-2xs">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                    <span class="text-xs font-black text-slate-800 uppercase tracking-tight px-1">
+                        ${MONTHS_ES[currentMonth]} ${currentYear}
+                    </span>
+                    <button onclick="changeMonth(1)" title="Mes siguiente" class="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 active:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition-colors cursor-pointer shadow-2xs">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
+                <button onclick="goToCurrentMonth()" title="Ir a hoy" class="text-[10px] font-black px-2.5 py-1.5 rounded-lg ${isCurrentCalendarMonth ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-blue-600 text-white shadow-xs'} transition-all flex items-center gap-1 cursor-pointer shrink-0">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <span>Hoy</span>
+                </button>
+            </div>
+            
+            <!-- Matriz fija de Meses (2 filas de 6) sin desplazamientos ni fallos -->
+            <div class="grid grid-cols-6 gap-1 w-full">
+                ${MONTHS_SHORT.map((mShort, idx) => {
+                    const isSel = idx === currentMonth;
+                    const isTodayMonth = (today.getFullYear() === currentYear && today.getMonth() === idx);
+                    const btnClass = isSel
+                        ? 'bg-blue-600 text-white font-black shadow-xs ring-1 ring-blue-600'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200';
+                    return `
+                        <button onclick="selectMonth(${idx}, ${currentYear})"
+                            class="w-full py-1 text-center rounded-md text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-0.5 ${btnClass}">
+                            <span>${mShort}</span>
+                            ${isTodayMonth && !isSel ? '<span class="w-1 h-1 rounded-full bg-blue-500"></span>' : ''}
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+
+        <!-- Cabecera del Mes en el Calendario (Solo en Escritorio) -->
+        <div class="hidden md:flex px-4 py-3 bg-slate-50 border-b border-slate-200 items-center justify-between">
             <div class="flex items-center gap-2">
+                <button onclick="changeMonth(-1)" title="Mes anterior (← Flecha Izquierda)" class="p-1 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
                 <h2 class="text-base md:text-lg font-black text-slate-800 uppercase tracking-tight">
                     ${MONTHS_ES[currentMonth]} ${currentYear}
                 </h2>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wider">
-                    Bajo de Fuera
-                </span>
+                <button onclick="changeMonth(1)" title="Mes siguiente (→ Flecha Derecha)" class="p-1 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+                <button onclick="goToCurrentMonth()" title="Ir al día de hoy" class="ml-1 text-xs font-black px-2.5 py-1 rounded-lg ${isCurrentCalendarMonth ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'} transition-all flex items-center gap-1 cursor-pointer">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <span>Hoy</span>
+                </button>
             </div>
         </div>
 
         <!-- Días de la semana -->
-        <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-100/70 text-center py-2.5 text-[11px] md:text-xs font-black text-slate-500 uppercase tracking-wider">
+        <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-100/70 text-center py-2 md:py-2.5 text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wider">
             <div>Lun</div>
             <div>Mar</div>
             <div>Mié</div>
@@ -349,33 +397,33 @@ function renderMonthlyCalendar() {
             : 'bg-slate-100/70 hover:bg-slate-100/90 opacity-60 hover:opacity-100';
 
         const dayNumberClass = isToday
-            ? 'w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-sm text-xs font-black'
+            ? 'w-5 h-5 md:w-6 md:h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-sm text-[11px] md:text-xs font-black'
             : (isCurrentMonth ? 'text-xs font-black text-slate-700' : 'text-xs font-bold text-slate-400');
 
         html += `
-        <div ondblclick="handleDayDoubleClick('${dateStr}')" data-date="${dateStr}" class="dropzone ${cellBgClass} min-h-[105px] md:min-h-[125px] p-1.5 md:p-2 flex flex-col justify-start transition-all group relative border-t border-transparent cursor-pointer">
+        <div ondblclick="handleDayDoubleClick('${dateStr}')" data-date="${dateStr}" class="dropzone ${cellBgClass} min-h-[70px] md:min-h-[125px] p-1 md:p-2 flex flex-col justify-start transition-all group relative border-t border-transparent cursor-pointer">
             
-            <!-- Cabecera de Celda: Número de Día + Plazas Ocupadas / Cupo -->
-            <div class="flex items-center justify-between mb-1.5 pointer-events-none">
+            <!-- Cabecera de Celda: Número de Día + Plazas Disponibles -->
+            <div class="flex items-center justify-between mb-1 md:mb-1.5 pointer-events-none">
                 <span class="${dayNumberClass}">
                     ${d}
                 </span>
 
-                <div class="flex items-center gap-1.5">
-                    ${summary.totalOccupied > 0 && summary.poolAvailable > 0 ? `
-                        <span title="${summary.poolAvailable} plazas disponibles hoy" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                <div class="flex items-center gap-1 md:gap-1.5">
+                    ${summary.poolAvailable > 0 ? `
+                        <span title="${summary.poolAvailable} plazas disponibles hoy" class="text-[8px] md:text-[9px] font-bold px-1 py-0.2 md:px-1.5 md:py-0.5 rounded bg-emerald-100 text-emerald-800 flex items-center gap-0.5 md:gap-1">
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            ${summary.poolAvailable} lib.
+                            <span>${summary.poolAvailable}</span><span class="hidden md:inline">&nbsp;lib.</span>
                         </span>
                     ` : ''}
-                    <span class="text-[9.5px] md:text-[10px] font-bold ${summary.totalOccupied >= summary.totalQuota ? 'text-slate-500' : 'text-slate-400'}">
+                    <span class="hidden md:inline text-[9.5px] md:text-[10px] font-bold ${summary.totalOccupied >= summary.totalQuota ? 'text-slate-500' : 'text-slate-400'}">
                         ${summary.totalOccupied > 0 || isCurrentMonth ? `${summary.totalOccupied}/${summary.totalQuota} pl.` : ''}
                     </span>
                 </div>
             </div>
 
-            <!-- Lista de Cajas de Plazas -->
-            <div class="flex-1 flex flex-col gap-1 pt-0.5">
+            <!-- Lista de Plazas por Centro (En móvil: tags compactos sin caja) -->
+            <div class="flex-1 flex flex-wrap md:flex-col gap-1 pt-0.5 content-start">
                 ${displayBoxes.length > 0 ? displayBoxes.map(box => {
                     const cInfo = CENTERS[box.centerCode] || { name: box.centerCode, color: 'bg-slate-700', text: 'text-white' };
                     const isMy = !isGuestMode && normCenter(box.centerCode) === normCenter(myCenterCode);
@@ -388,9 +436,6 @@ function renderMonthlyCalendar() {
                         ? `draggable="true" data-drag-id="${box.id}" data-drag-date="${dateStr}" data-drag-center="${box.centerCode}" data-drag-pax="${box.totalPlazas}"` 
                         : '';
                     const cursorClass = canDrag ? 'draggable-item cursor-grab active:cursor-grabbing' : (isLocked ? 'cursor-not-allowed opacity-90' : 'cursor-pointer');
-                    const actionTip = isLocked 
-                        ? 'Plazas bloqueadas por solicitud pendiente.' 
-                        : ((currentUserKey === 'admin' || isMy) ? 'Doble clic para editar o ceder.' : 'Doble clic para pedir plazas.');
 
                     const pBg = cInfo.pastelBg || 'bg-slate-50';
                     const pBorder = cInfo.pastelBorder || 'border-slate-200';
@@ -431,24 +476,25 @@ function renderMonthlyCalendar() {
                          onclick="handleBoatClick(event, '${dateStr}', '${box.id}', '${box.centerCode}')"
                          ondblclick="handleBoatDoubleClick(event, '${dateStr}', '${box.id}', '${box.centerCode}')" 
                          ${mySalidaStyle}
-                         class="boat-block select-none w-full h-[25px] md:h-[28px] rounded-lg px-1.5 md:px-2 py-0.5 flex justify-between items-center ${pBg} border ${pBorder} shadow-xs hover:brightness-95 ${cursorClass} transition-all ${mySalidaClass}">
+                         class="boat-block select-none w-auto md:w-full h-auto md:h-[28px] rounded md:rounded-lg p-0 md:px-2 md:py-0.5 flex justify-start md:justify-between items-center gap-1 md:gap-1.5 bg-transparent md:${pBg} border-0 md:border md:${pBorder} shadow-none md:shadow-xs hover:brightness-95 ${cursorClass} transition-all ${mySalidaClass}">
                         ${customTooltip}
                         ${noteIndicator}
-                        <div class="truncate flex items-center gap-1.5 pointer-events-none min-w-0">
-                            <span class="min-w-[18px] px-1 h-4 rounded-md flex items-center justify-center font-black text-[8px] text-white shrink-0 shadow-2xs" style="background-color: ${dotColor}">
+                        <div class="truncate flex items-center gap-1 pointer-events-none min-w-0">
+                            <span class="school-tag min-w-[17px] h-[17px] md:min-w-[18px] md:h-4 px-1 rounded flex items-center justify-center font-black text-[8px] text-white shrink-0 shadow-2xs" style="background-color: ${dotColor}">
                                 ${normCenter(box.centerCode)}
                             </span>
-                            <span class="truncate font-bold text-[10.5px] md:text-[11px] text-slate-900 tracking-tight">${boxLabel}</span>
+                            <span class="hidden md:inline truncate font-bold text-[10.5px] md:text-[11px] text-slate-900 tracking-tight">${boxLabel}</span>
                         </div>
-                        <div class="flex items-center gap-1 shrink-0 pointer-events-none pr-0.5">
-                            ${isLocked ? `<span class="text-[9px] font-bold text-amber-700 bg-amber-100/90 px-1 rounded flex items-center gap-0.5" title="Plazas Bloqueadas: Solicitud pendiente">⏳</span>` : ''}
-                            <span class="font-black text-[11px] md:text-xs text-slate-900">${box.boxPax}</span>
+                        <div class="flex items-center gap-0.5 md:gap-1 shrink-0 pointer-events-none pr-0.5">
+                            ${isLocked ? `<span class="text-[8px] md:text-[9px] font-bold text-amber-700 bg-amber-100/90 px-0.5 rounded flex items-center" title="Plazas Bloqueadas: Solicitud pendiente">⏳</span>` : ''}
+                            <span class="font-black text-[9.5px] md:text-xs text-slate-800 md:text-slate-900">${box.boxPax}</span>
                         </div>
                     </div>
                     `;
                 }).join('') : `
-                    <div class="h-full flex items-center justify-center text-[10px] text-slate-300 italic pointer-events-none select-none py-2">
-                        + Doble clic para añadir
+                    <div class="h-full flex items-center justify-center text-[9px] md:text-[10px] text-slate-300 italic pointer-events-none select-none py-1 md:py-2">
+                        <span class="hidden md:inline">+ Doble clic para añadir</span>
+                        <span class="md:hidden text-slate-300 font-bold text-xs">+</span>
                     </div>
                 `}
             </div>
@@ -749,26 +795,38 @@ function renderStats() {
     }
 
     let html = `
-    <div class="max-w-5xl mx-auto w-full flex flex-col gap-6 pb-12">
+    <div class="max-w-5xl mx-auto w-full flex flex-col gap-3 md:gap-6 pb-6 md:pb-12">
         
         <!-- Cabecera de Estadísticas -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 md:gap-4 bg-white p-3 md:p-5 rounded-xl md:rounded-2xl border border-slate-200 shadow-sm">
             <div>
-                <h2 class="text-lg font-black text-slate-900 tracking-tight uppercase">Estadísticas Mensuales · Bajo de Fuera</h2>
-                <p class="text-xs text-slate-500 font-medium">${MONTHS_ES[currentMonth]} ${currentYear} · ${gTotPlazas} plazas asignadas de ${gTotMonthQuota} plazas totales del mes (${gTotMonthQuota > 0 ? ((gTotPlazas / gTotMonthQuota) * 100).toFixed(1) : '0.0'}% ocupación)</p>
+                <h2 class="text-sm md:text-lg font-black text-slate-900 tracking-tight uppercase">Estadísticas Mensuales · Bajo de Fuera</h2>
+                <p class="text-[10.5px] md:text-xs text-slate-500 font-medium leading-relaxed">${MONTHS_ES[currentMonth]} ${currentYear} · ${gTotPlazas} plazas asignadas de ${gTotMonthQuota} plazas totales del mes (${gTotMonthQuota > 0 ? ((gTotPlazas / gTotMonthQuota) * 100).toFixed(1) : '0.0'}% ocupación)</p>
             </div>
         </div>
 
-        <!-- Tabla de Estadísticas Global (Estilo Visor Reserva) -->
+        <!-- Tabla de Estadísticas Global (Adaptada para Móvil y Escritorio) -->
         <div class="w-full overflow-x-auto rounded-xl border border-slate-200 shadow-sm bg-white">
-            <table class="w-full text-left min-w-[700px]">
+            <table class="w-full text-left min-w-[380px] md:min-w-[700px]">
                 <thead>
-                    <tr class="border-b border-slate-200 bg-white">
-                        <th class="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 w-64 border-r border-slate-100">Centro</th>
-                        <th class="px-4 py-4 text-center text-[10px] font-black uppercase tracking-widest text-slate-600 border-r border-slate-100">Salidas / Barcos</th>
-                        <th class="px-4 py-4 text-center text-[10px] font-black uppercase tracking-widest text-slate-600 border-r border-slate-100">Plazas Asignadas</th>
-                        <th class="px-4 py-4 text-center text-[10px] font-black uppercase tracking-widest text-blue-500 border-r border-slate-100">% del Total</th>
-                        <th class="px-5 py-4 text-center text-[10px] font-black uppercase tracking-widest text-slate-600">Promedio Pax/Barco</th>
+                    <tr class="border-b border-slate-200 bg-slate-50 md:bg-white text-[9px] md:text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        <th class="px-2.5 md:px-5 py-2.5 md:py-4 w-32 md:w-64 border-r border-slate-100">Centro</th>
+                        <th class="px-2 md:px-4 py-2.5 md:py-4 text-center border-r border-slate-100">
+                            <span class="md:hidden">Barcos</span>
+                            <span class="hidden md:inline">Salidas / Barcos</span>
+                        </th>
+                        <th class="px-2 md:px-4 py-2.5 md:py-4 text-center border-r border-slate-100">
+                            <span class="md:hidden">Plazas</span>
+                            <span class="hidden md:inline">Plazas Asignadas</span>
+                        </th>
+                        <th class="px-2 md:px-4 py-2.5 md:py-4 text-center text-blue-600 md:text-blue-500 border-r border-slate-100">
+                            <span class="md:hidden">% Total</span>
+                            <span class="hidden md:inline">% del Total</span>
+                        </th>
+                        <th class="px-2 md:px-5 py-2.5 md:py-4 text-center text-slate-500 md:text-slate-600">
+                            <span class="md:hidden">Promedio</span>
+                            <span class="hidden md:inline">Promedio Pax/Barco</span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -780,22 +838,22 @@ function renderStats() {
 
                         return `
                         <tr class="hover:bg-slate-50 transition-colors bg-white">
-                            <td class="px-5 py-3.5 border-r border-slate-100">
-                                <div class="flex items-center gap-3">
-                                    <span class="w-6 h-6 rounded ${c.color} ${c.text} flex items-center justify-center text-[10px] font-black shadow-xs shrink-0">${k}</span>
-                                    <span class="font-bold text-slate-800 text-xs whitespace-nowrap">${c.name}</span>
+                            <td class="px-2.5 md:px-5 py-2 md:py-3.5 border-r border-slate-100">
+                                <div class="flex items-center gap-1.5 md:gap-3">
+                                    <span class="w-5 h-5 md:w-6 md:h-6 rounded ${c.color} ${c.text} flex items-center justify-center text-[9px] md:text-[10px] font-black shadow-xs shrink-0">${k}</span>
+                                    <span class="font-bold text-slate-800 text-[11px] md:text-xs truncate max-w-[95px] md:max-w-none">${c.name}</span>
                                 </div>
                             </td>
-                            <td class="py-3.5 px-4 text-center text-slate-700 font-semibold text-xs border-r border-slate-100">
-                                ${s.barcos} ${s.barcos === 1 ? 'barco' : 'barcos'}
+                            <td class="py-2 md:py-3.5 px-2 md:px-4 text-center text-slate-700 font-semibold text-[11px] md:text-xs border-r border-slate-100">
+                                ${s.barcos} <span class="hidden md:inline text-[11px] font-normal text-slate-400">${s.barcos === 1 ? 'barco' : 'barcos'}</span>
                             </td>
-                            <td class="py-3.5 px-4 text-center font-bold text-slate-900 text-sm border-r border-slate-100">
+                            <td class="py-2 md:py-3.5 px-2 md:px-4 text-center font-bold text-slate-900 text-xs md:text-sm border-r border-slate-100">
                                 ${s.plazas}
                             </td>
-                            <td class="py-3.5 px-4 text-center text-blue-600 font-bold text-xs border-r border-slate-100">
+                            <td class="py-2 md:py-3.5 px-2 md:px-4 text-center text-blue-600 font-bold text-[11px] md:text-xs border-r border-slate-100">
                                 ${pct}%
                             </td>
-                            <td class="py-3.5 px-4 text-center text-slate-500 font-semibold text-xs">
+                            <td class="py-2 md:py-3.5 px-2 md:px-4 text-center text-slate-500 font-semibold text-[11px] md:text-xs">
                                 ${avg}
                             </td>
                         </tr>
@@ -804,20 +862,20 @@ function renderStats() {
                 </tbody>
                 <tfoot>
                     <tr class="border-t border-slate-200">
-                        <td class="px-5 py-4 text-[10px] font-black uppercase tracking-widest bg-[#1f2937] text-white border-r border-slate-700">
-                            TOTALES MES
+                        <td class="px-2.5 md:px-5 py-2.5 md:py-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest bg-[#1f2937] text-white border-r border-slate-700">
+                            TOTAL
                         </td>
-                        <td class="py-4 px-4 text-center bg-[#111827] border-r border-slate-700 font-bold text-slate-200 text-xs">
-                            ${gTotBarcos} barcos
+                        <td class="py-2.5 md:py-4 px-2 md:px-4 text-center bg-[#111827] border-r border-slate-700 font-bold text-slate-200 text-[11px] md:text-xs">
+                            ${gTotBarcos} <span class="hidden md:inline font-normal text-slate-400">barcos</span>
                         </td>
-                        <td class="py-4 px-4 text-center bg-[#3b82f6] text-white font-black text-sm tracking-wide border-r border-slate-700">
-                            ${gTotPlazas} plazas
+                        <td class="py-2.5 md:py-4 px-2 md:px-4 text-center bg-[#3b82f6] text-white font-black text-xs md:text-sm tracking-wide border-r border-slate-700">
+                            ${gTotPlazas} <span class="hidden md:inline font-normal text-blue-100">pl.</span>
                         </td>
-                        <td class="py-4 px-4 text-center bg-[#111827] border-r border-slate-700 font-bold text-blue-400 text-xs">
+                        <td class="py-2.5 md:py-4 px-2 md:px-4 text-center bg-[#111827] border-r border-slate-700 font-bold text-blue-400 text-[11px] md:text-xs">
                             100%
                         </td>
-                        <td class="py-4 px-4 text-center bg-[#111827] text-slate-400 font-medium text-xs">
-                            ${gTotBarcos > 0 ? (gTotPlazas / gTotBarcos).toFixed(1) : '—'} buzos/barco
+                        <td class="py-2.5 md:py-4 px-2 md:px-4 text-center bg-[#111827] text-slate-400 font-medium text-[10px] md:text-xs">
+                            ${gTotBarcos > 0 ? (gTotPlazas / gTotBarcos).toFixed(1) : '—'} <span class="hidden md:inline">buzos/barco</span>
                         </td>
                     </tr>
                 </tfoot>
@@ -1041,3 +1099,147 @@ document.addEventListener('mouseleave', () => {
         el.classList.remove('pending-pair-glow');
     });
 });
+
+/* =========================================================================
+   MODAL DE AYUDA (3 PESTAÑAS: SALIDAS, TRUEQUES Y UTILIDADES)
+   ========================================================================= */
+
+let helpActiveTab = 'salidas';
+
+function setHelpTab(tabKey) {
+    helpActiveTab = tabKey;
+    renderHelpModalContent();
+}
+
+function renderHelpModalContent() {
+    const tabs = ['salidas', 'colaboracion', 'utilidades'];
+    tabs.forEach(t => {
+        const el = getEl(`help-tab-${t}`);
+        if (el) {
+            if (t === helpActiveTab) {
+                el.className = "py-2 px-2 text-center rounded-lg text-xs font-black bg-white text-blue-700 shadow-xs border border-slate-200 cursor-pointer transition-all";
+            } else {
+                el.className = "py-2 px-2 text-center rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer transition-all";
+            }
+        }
+    });
+
+    const container = getEl('help-tab-content-container');
+    if (!container) return;
+
+    let html = '';
+
+    if (helpActiveTab === 'salidas') {
+        html = `
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+                <div class="flex items-center gap-2 text-slate-900 font-black text-xs">
+                    <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                    <span>Gestión de Salidas</span>
+                </div>
+
+                <div class="space-y-2 text-slate-600">
+                    <div class="p-2.5 bg-white rounded-lg border border-slate-200">
+                        <span class="font-black text-slate-800 block text-xs mb-1">
+                            ✏️ Modificar Plazas o Nota
+                        </span>
+                        <p class="text-[11.5px] leading-relaxed">
+                            Haz <b>clic</b> sobre la tarjeta de tu centro en el calendario. Podrás modificar las plazas asignadas (de 1 a 15) o añadir una nota informativa opcional (hasta 150 caracteres).
+                        </p>
+                    </div>
+
+                    <div class="p-2.5 bg-white rounded-lg border border-slate-200">
+                        <span class="font-black text-slate-800 block text-xs mb-1">
+                            ➕ Añadir Nueva Salida
+                        </span>
+                        <p class="text-[11.5px] leading-relaxed">
+                            Haz <b>doble clic</b> en la celda de cualquier día autorizado en el calendario. Si hay cupo libre y menos de 2 barcos, podrás inscribir tu salida al instante.
+                        </p>
+                    </div>
+
+                    <div class="p-2.5 bg-white rounded-lg border border-slate-200">
+                        <span class="font-black text-slate-800 block text-xs mb-1">
+                            🗑️ Eliminar Salida
+                        </span>
+                        <p class="text-[11.5px] leading-relaxed">
+                            Abre el menú de tu salida haciendo <b>clic</b> en ella y selecciona <i>"Eliminar Salida Completamente"</i> para liberar tus plazas al cupo disponible.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (helpActiveTab === 'colaboracion') {
+        html = `
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+                <div class="flex items-center gap-2 text-slate-900 font-black text-xs">
+                    <span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                    <span>Cesiones y Trueques entre Centros</span>
+                </div>
+
+                <div class="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                    <span class="font-black text-amber-800 flex items-center gap-1 text-xs">
+                        <span>🎁 Ceder Plazas (Traspaso Directo)</span>
+                    </span>
+                    <p class="text-slate-600 text-[11.5px] leading-relaxed">
+                        Haz <b>clic</b> en tu salida y selecciona <i>"🎁 Ceder Plazas"</i>. Indica cuántas plazas deseas transferir y a qué centro colaborador. El traspaso se realiza en 1 solo paso sin intercambio de fechas.
+                    </p>
+                </div>
+
+                <div class="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                    <span class="font-black text-purple-800 flex items-center gap-1 text-xs">
+                        <span>🔄 Intercambio de Salidas (Trueque entre fechas)</span>
+                    </span>
+                    <p class="text-slate-600 text-[11.5px] leading-relaxed">
+                        <b>Arrastra con el ratón</b> (Drag & Drop) la tarjeta de tu salida y suéltala sobre otra fecha en el calendario, o haz <b>clic</b> en <i>"🔄 Proponer Intercambio"</i> dentro de su menú.
+                    </p>
+                </div>
+
+                <div class="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                    <span class="font-black text-slate-800 flex items-center gap-1 text-xs">
+                        <span>🔔 Notificaciones WhatsApp y Sala de Espera</span>
+                    </span>
+                    <p class="text-slate-600 text-[11.5px] leading-relaxed">
+                        Al enviar la propuesta, se envía un mensaje automático al grupo de WhatsApp. La salida queda bloqueada con un reloj de arena <span class="font-mono font-bold text-amber-600">⏳</span>. El centro receptor verá la campana roja <span class="font-mono font-bold text-red-600">🔔</span> en la cabecera para <b>Aceptar</b> o <b>Rechazar</b>.
+                    </p>
+                </div>
+            </div>
+        `;
+    } else if (helpActiveTab === 'utilidades') {
+        html = `
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+                <div class="flex items-center gap-2 text-slate-900 font-black text-xs">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <span>Navegación, PWA e Informes</span>
+                </div>
+
+                <div class="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                    <span class="font-black text-slate-800 block text-xs">
+                        📅 Botón "Hoy"
+                    </span>
+                    <p class="text-slate-600 text-[11.5px] leading-relaxed">
+                        Haz <b>clic</b> en el botón <b>"Hoy"</b> situado junto a las flechas del mes para regresar instantáneamente a la fecha actual con un resaltado visual animado en la cuadrícula.
+                    </p>
+                </div>
+
+                <div class="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                    <span class="font-black text-slate-800 block text-xs">
+                        🖨️ Descargar Informes (PDF y CSV)
+                    </span>
+                    <p class="text-slate-600 text-[11.5px] leading-relaxed">
+                        Haz <b>clic</b> en el icono de impresora en la cabecera para generar un documento PDF vectorial listo para imprimir o descargar un archivo CSV con las asignaciones.
+                    </p>
+                </div>
+
+                <div class="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                    <span class="font-black text-slate-800 block text-xs">
+                        ⚡ Modo Fuera de Línea (PWA)
+                    </span>
+                    <p class="text-slate-600 text-[11.5px] leading-relaxed">
+                        La aplicación funciona sin conexión gracias al Service Worker y a la persistencia local de Firestore. Si pierdes la cobertura, verás el aviso de <i>Modo lectura</i> y podrás seguir consultando el calendario. Al reconectarte, los datos se sincronizarán solos.
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
