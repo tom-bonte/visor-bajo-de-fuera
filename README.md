@@ -73,3 +73,25 @@ justo la buena— y la restauración devolvió el estado ya estropeado.
 que nunca se ha probado a restaurar no es una copia de seguridad, es un fichero.
 Además, GitHub desactiva las tareas programadas si el repositorio pasa 60 días sin
 actividad; si eso ocurre, basta con volver a activarla desde *Actions*.
+
+---
+
+## 🚨 Avisos de fallos (Sentry)
+
+`error-reporter.js` es el primer script de la página. Recoge cualquier fallo del
+navegador —errores sueltos, promesas rechazadas y los que la app ya capturaba y
+sólo escribía en la consola— desde el primer instante de la carga.
+
+Con `SENTRY_DSN` vacío en `config.js` (estado por defecto) **no se descarga nada
+de fuera**: los fallos sólo se ven en la consola del navegador. Para activar los
+avisos:
+
+1. Crear una cuenta gratuita en [sentry.io](https://sentry.io) y un proyecto de
+   tipo **Browser → JavaScript**.
+2. Copiar el DSN que da Sentry (empieza por `https://…@…ingest.sentry.io/…`).
+3. Pegarlo en `SENTRY_DSN` en `config.js` y desplegar.
+
+El DSN es público por diseño: viaja en el navegador de todas las escuelas y no
+es una contraseña. Aun así, antes de enviar nada se limpia el informe
+(`scrub()`): se recorta la URL, se quita el usuario y se tapan los correos.
+Desde `localhost` nunca se envía nada.

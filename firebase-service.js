@@ -26,6 +26,16 @@ let unsubscribeMonthListener = null;
 let unsubscribeHistoryListener = null;
 
 /**
+ * Un fallo que la app ya ha capturado, pero del que nadie se enteraba: iba a la
+ * consola del navegador de la escuela y ahí moría. Ahora además se envía a la
+ * alarma (Sentry) si está configurada.
+ */
+function reportFailure(err, donde) {
+    console.error(donde + ':', err);
+    if (typeof window !== 'undefined' && window.errorReporter) window.errorReporter.report(err, donde);
+}
+
+/**
  * Dispara el webhook a Make.com para notificar al grupo de WhatsApp de Bajo de Fuera.
  * @param {string} msg
  */
@@ -66,10 +76,10 @@ async function sendBdfWebhook(msg) {
         if (!response.ok) {
             let detail = '';
             try { detail = (await response.json()).error || ''; } catch (e) { /* respuesta sin JSON */ }
-            console.error(`[WhatsApp] El aviso no se pudo enviar (${response.status}). ${detail}`);
+            reportFailure(new Error(`${response.status} ${detail}`), '[WhatsApp] El aviso no se pudo enviar');
         }
     } catch (e) {
-        console.error("Error enviando el aviso de WhatsApp:", e);
+        reportFailure(e, "Error enviando el aviso de WhatsApp");
     }
 }
 
@@ -90,7 +100,7 @@ async function logBdfHistory(actionType, details) {
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
     } catch (e) {
-        console.error("Error escribiendo en log de historial:", e);
+        reportFailure(e, "Error escribiendo en log de historial");
     }
 }
 
@@ -150,7 +160,7 @@ function listenCurrentDay(dateStr) {
         monthDaysCache[dateStr] = currentDayData;
         renderAll();
     }, (error) => {
-        console.error("Error escuchando día en Firestore:", error);
+        reportFailure(error, "Error escuchando día en Firestore");
     });
 }
 
@@ -195,7 +205,7 @@ function listenMonthOverview(startDateOrYear, endDateOrMonth) {
             });
             renderAll();
         }, (error) => {
-            console.error("Error escuchando rango en Firestore:", error);
+            reportFailure(error, "Error escuchando rango en Firestore");
         });
 }
 
@@ -219,7 +229,7 @@ async function ensureDayInCache(dateStr) {
             monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: dayCap, salidas: [], allocations: {} };
         }
     } catch (err) {
-        console.error(`Error obteniendo día ${dateStr} de Firestore:`, err);
+        reportFailure(err, `Error obteniendo día ${dateStr} de Firestore`);
         if (!monthDaysCache[dateStr]) {
             monthDaysCache[dateStr] = { id: dateStr, date: dateStr, totalQuota: dayCap, salidas: [], allocations: {} };
         }
@@ -249,7 +259,7 @@ function listenHistoryLogs() {
                 renderHistoryView();
             }
         }, (error) => {
-            console.error("Error escuchando historial en Firestore:", error);
+            reportFailure(error, "Error escuchando historial en Firestore");
         });
 }
 
@@ -264,6 +274,16 @@ function listenBdfRequests() {
         unsubscribeRequestsListener = null;
     }
 
+    // Las solicitudes sólo las pueden leer los centros con sesión (así lo exigen
+    // las reglas). En modo consulta esto pedía permiso igualmente y Firestore
+    // respondía "Missing or insufficient permissions" en CADA visita: un fallo
+    // que nadie veía hasta que se instaló la alarma. No se pide y ya está.
+    if (typeof auth === 'undefined' || !auth.currentUser) {
+        bdfRequests = [];
+        if (typeof updateNotificationsUI === 'function') updateNotificationsUI();
+        return;
+    }
+
     unsubscribeRequestsListener = db.collection(BDF_COLLECTIONS.REQUESTS)
         .where('status', '==', 'pending')
         .onSnapshot((snapshot) => {
@@ -276,7 +296,7 @@ function listenBdfRequests() {
                 if (data.type === 'donation') {
                     // Si existen documentos antiguos pendientes de donation en bdf_requests, limpiarlos una sola vez desde admin
                     if (currentUserKey === 'admin') {
-                        db.collection(BDF_COLLECTIONS.REQUESTS).doc(doc.id).delete().catch(console.error);
+                        db.collection(BDF_COLLECTIONS.REQUESTS).doc(doc.id).delete().catch(e => reportFailure(e, 'tarea en segundo plano'));
                     }
                     return;
                 }
@@ -301,7 +321,7 @@ function listenBdfRequests() {
                         db.collection(BDF_COLLECTIONS.REQUESTS).doc(doc.id).update({
                             status: 'expired',
                             expiredAt: firebase.firestore.FieldValue.serverTimestamp()
-                        }).catch(console.error);
+                        }).catch(e => reportFailure(e, 'tarea en segundo plano'));
                     }
                     return;
                 }
@@ -314,7 +334,7 @@ function listenBdfRequests() {
                 renderAll();
             }
         }, (error) => {
-            console.error("Error escuchando solicitudes en Firestore:", error);
+            reportFailure(error, "Error escuchando solicitudes en Firestore");
         });
 }
 
@@ -377,7 +397,7 @@ async function acceptBdfRequest(requestId, btnEl = null) {
             await acceptBdfSpotTransfer(req);
         }
     } catch (err) {
-        console.error("Error al aceptar solicitud:", err);
+        reportFailure(err, "Error al aceptar solicitud");
         showNotification('Error', err.message, true);
         renderAll();
     } finally {
@@ -519,7 +539,7 @@ async function acceptBdfSwap(req) {
             return { ok: true, safe_A, safe_B, retained_A, retained_B };
         });
     } catch (err) {
-        console.error("Error aceptando intercambio:", err);
+        reportFailure(err, "Error aceptando intercambio");
         renderAll();
         throw new Error(describeFirestoreError(err, 'aceptar el intercambio'));
     }
@@ -549,10 +569,10 @@ async function acceptBdfSwap(req) {
         logBdfHistory('swap_salidas', {
             dateA, dateB, centerA: normA, centerB: normB,
             safePaxA: safe_A, retainedPaxA: retained_A, safePaxB: safe_B, retainedPaxB: retained_B
-        }).catch(console.error);
+        }).catch(e => reportFailure(e, 'tarea en segundo plano'));
 
         const msg = `🤖 *AVISO AUTOMÁTICO*\n✅ *INTERCAMBIO ACEPTADO* - ${cAInfo.emoji} ${cAInfo.name} ↔️ ${cBInfo.emoji} ${cBInfo.name}\nSe ha completado el intercambio de fechas en Bajo de Fuera:\n• ${cAInfo.name}: pasa al ${dB} (${safe_A} pl.)${retained_A > 0 ? ` (mantiene ${retained_A} pl. en el ${dA})` : ''}\n• ${cBInfo.name}: pasa al ${dA} (${safe_B} pl.)${retained_B > 0 ? ` (mantiene ${retained_B} pl. en el ${dB})` : ''}`;
-        sendBdfWebhook(msg).catch(console.error);
+        sendBdfWebhook(msg).catch(e => reportFailure(e, 'tarea en segundo plano'));
     }
 
     closeNotificationsModal();
@@ -646,7 +666,7 @@ async function acceptBdfSpotTransfer(req) {
             return { ok: true };
         });
     } catch (err) {
-        console.error("Error aceptando transferencia de plazas:", err);
+        reportFailure(err, "Error aceptando transferencia de plazas");
         renderAll();
         throw new Error(describeFirestoreError(err, 'aceptar la cesión de plazas'));
     }
@@ -677,11 +697,11 @@ async function acceptBdfSpotTransfer(req) {
             to: receivingCenter,
             slots: spots,
             note: note
-        }).catch(console.error);
+        }).catch(e => reportFailure(e, 'tarea en segundo plano'));
 
         const titleText = isDonation ? 'CESIÓN ACEPTADA' : 'PETICIÓN ACEPTADA';
         const msg = `🤖 *AVISO AUTOMÁTICO*\n✅ *${titleText}* - ${gInfo.emoji} ${gInfo.name} a ${rInfo.emoji} ${rInfo.name}\nPara el ${dStr}, ${gInfo.name} ha transferido ${isFull ? 'el barco completo' : `${spots} plazas`} en Bajo de Fuera a ${rInfo.name}.`;
-        sendBdfWebhook(msg).catch(console.error);
+        sendBdfWebhook(msg).catch(e => reportFailure(e, 'tarea en segundo plano'));
     }
 
     closeNotificationsModal();
@@ -709,7 +729,7 @@ async function cancelBdfRequest(requestId) {
         }
         showToast('Solicitud Retirada', 'La petición ha sido cancelada y las plazas quedan desbloqueadas.');
     } catch (err) {
-        console.error("Error al cancelar solicitud:", err);
+        reportFailure(err, "Error al cancelar solicitud");
         showNotification('Error', 'No se pudo cancelar la solicitud: ' + err.message, true);
     }
 }
@@ -730,7 +750,7 @@ async function rejectBdfRequest(requestId) {
         }
         showToast('Solicitud Denegada', 'La petición ha sido rechazada y las plazas quedan desbloqueadas.');
     } catch (err) {
-        console.error("Error al rechazar solicitud:", err);
+        reportFailure(err, "Error al rechazar solicitud");
         showNotification('Error', 'No se pudo rechazar la solicitud: ' + err.message, true);
     }
 }
@@ -1024,10 +1044,10 @@ async function executeAddSalida(dateStr, centerCode, pax, note = '') {
                 center: normCode,
                 slots: pax,
                 note: note
-            }).catch(console.error);
+            }).catch(e => reportFailure(e, 'tarea en segundo plano'));
         }
     } catch (err) {
-        console.error("Error guardando salida en Firestore:", err);
+        reportFailure(err, "Error guardando salida en Firestore");
         if (prevDayCache) {
             monthDaysCache[dateStr] = prevDayCache;
         } else {
@@ -1143,10 +1163,10 @@ async function executeEditSalida(dateStr, salidaId, newPax, newCenterCode = null
                 oldCenter: oldCenter,
                 slots: newPax,
                 note: newNote
-            }).catch(console.error);
+            }).catch(e => reportFailure(e, 'tarea en segundo plano'));
         }
     } catch (err) {
-        console.error("Error modificando salida en Firestore:", err);
+        reportFailure(err, "Error modificando salida en Firestore");
         if (prevDayCache) {
             monthDaysCache[dateStr] = prevDayCache;
         } else {
@@ -1221,10 +1241,10 @@ async function executeDeleteSalida(dateStr, salidaId, centerCode = null) {
             logBdfHistory('delete_salida', {
                 date: dateStr,
                 center: centerCode
-            }).catch(console.error);
+            }).catch(e => reportFailure(e, 'tarea en segundo plano'));
         }
     } catch (err) {
-        console.error("Error eliminando salida en Firestore:", err);
+        reportFailure(err, "Error eliminando salida en Firestore");
         if (prevDayCache) {
             monthDaysCache[dateStr] = prevDayCache;
         } else {
@@ -1411,10 +1431,10 @@ async function executeMoveSalida(sourceDate, targetDate, salidaId, centerCode, p
                 to: targetDate,
                 center: normCode,
                 slots: paxToMove
-            }).catch(console.error);
+            }).catch(e => reportFailure(e, 'tarea en segundo plano'));
         }
     } catch (err) {
-        console.error("Error moviendo salida en Firestore:", err);
+        reportFailure(err, "Error moviendo salida en Firestore");
         if (prevSourceCache) monthDaysCache[sourceDate] = prevSourceCache;
         else delete monthDaysCache[sourceDate];
 
@@ -1534,10 +1554,10 @@ async function executeSwapSalidas(dateA, salidaIdA, centerA, safePaxA, retainedP
         if (currentUserKey !== 'admin') {
             logBdfHistory('swap_salidas', {
                 dateA, dateB, centerA: normA, centerB: normB, safePaxA, retainedPaxA, safePaxB, retainedPaxB
-            }).catch(console.error);
+            }).catch(e => reportFailure(e, 'tarea en segundo plano'));
         }
     } catch (err) {
-        console.error("Error intercambiando salidas en Firestore:", err);
+        reportFailure(err, "Error intercambiando salidas en Firestore");
         if (prevCacheA) monthDaysCache[dateA] = prevCacheA;
         else delete monthDaysCache[dateA];
 
@@ -1618,10 +1638,10 @@ async function executeSpotTransferSalidas(dateStr, givingSalidaId, fromCenter, t
                 to: normTo,
                 slots: spots,
                 note: note
-            }).catch(console.error);
+            }).catch(e => reportFailure(e, 'tarea en segundo plano'));
         }
     } catch (err) {
-        console.error("Error transfiriendo plazas en Firestore:", err);
+        reportFailure(err, "Error transfiriendo plazas en Firestore");
         if (prevDayCache) {
             monthDaysCache[dateStr] = prevDayCache;
         } else {

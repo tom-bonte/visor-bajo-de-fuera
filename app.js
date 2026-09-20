@@ -19,6 +19,14 @@ auth.onAuthStateChanged((user) => {
     hideEl('password-modal');
     hideEl('password-error');
 
+    // La alarma de fallos ya está escuchando desde que cargó la página; aquí se
+    // le dice QUIÉN está usando la app y se le da permiso para enviar. Un fallo
+    // sin saber de qué escuela viene no se puede reproducir.
+    if (window.errorReporter) {
+        errorReporter.start(typeof SENTRY_DSN !== 'undefined' ? SENTRY_DSN : '', { centro: currentUserKey });
+        errorReporter.setContext({ centro: currentUserKey });
+    }
+
     // Iniciar escucha del rango visible actual, del historial y de solicitudes pendientes
     refreshRangeListener();
     listenHistoryLogs();

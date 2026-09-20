@@ -15,6 +15,10 @@
     <link rel="icon" type="image/webp" href="visor_favicon.webp">
     <link rel="manifest" href="manifest.json">
 
+    <!-- Alarma de fallos: PRIMER script de la página, para que también queden
+         registrados los errores de Tailwind, Firebase o de la propia config. -->
+    <script src="error-reporter.js?v=7.0"></script>
+
     <!-- Tailwind CSS CDN (con filtro de advertencia de producción en consola) -->
     <script>
         (function() {

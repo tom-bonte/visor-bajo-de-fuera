@@ -217,6 +217,13 @@ const firebaseConfig = {
     appId: "1:242126338137:web:c32d20d4697545a172d948"
 };
 
+/**
+ * Sentry: avisos de fallos del navegador. Vacío = no se carga nada de fuera y
+ * los fallos sólo se ven en la consola. El DSN es público por diseño (viaja en
+ * el navegador de todas las escuelas); no es una contraseña.
+ */
+const SENTRY_DSN = "";
+
 /** Colecciones Firestore de Bajo de Fuera (completamente independientes) */
 const BDF_COLLECTIONS = {
     DAYS: "bdf_days",
