@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // HELPER FUNCTIONS (Visor Bajo de Fuera)
+    // HELPER FUNCTIONS
     // =========================================================================
     function isSignedIn() {
       return request.auth != null;
@@ -14,7 +14,7 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 1. VISOR BAJO DE FUERA (Colecciones Aisladas)
+    // 1. VISOR BAJO DE FUERA (sin cambios en esta ronda)
     // =========================================================================
 
     // Calendario diario de Bajo de Fuera
@@ -44,12 +44,43 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 2. OTRAS APLICACIONES (Visor Reserva, Mangamar App, etc.)
+    // 2. VISOR RESERVA CABO DE PALOS
     // =========================================================================
-    // Mantiene el comportamiento actual intacto para el resto de colecciones
-    // para asegurar que ninguna otra app deje de funcionar.
-    match /{col}/{doc=**} {
-      allow read, write: if !col.matches('^bdf_.*');
+    // Lectura pública: la app tiene modo consulta sin login, y además la app
+    // Mangamar lee 'reservations_monthly' para poblar sus salidas.
+    // Escritura solo autenticada: el visor CdP nunca escribe sin sesión iniciada
+    // (no realiza ninguna escritura al cargar la página).
+
+    match /reservations_monthly/{doc=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
     }
+
+    match /swaps/{doc=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /history_logs/{doc=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /config/{doc=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // =========================================================================
+    // 3. APP MANGAMAR (comportamiento IDÉNTICO al actual, sin cambios)
+    // =========================================================================
+    // Se mantiene el acceso tal y como está hoy mientras se confirma su modelo
+    // de autenticación (personal = solo lectura, gerencia = escritura).
+    // PENDIENTE: restringir en una segunda fase.
+    match /{col}/{doc=**} {
+      allow read, write: if col.matches('^mangamar_.*');
+    }
+
+    // Cualquier colección no contemplada arriba queda denegada por defecto.
   }
 }

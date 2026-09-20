@@ -72,6 +72,35 @@ async function logBdfHistory(actionType, details) {
 }
 
 /**
+ * Traduce un error de Firestore en un mensaje claro y accionable para el usuario.
+ * Las transacciones necesitan conexión: sin cobertura fallan, y el usuario debe
+ * entender que NO se ha guardado nada en lugar de ver un error técnico.
+ * @param {Error} err
+ * @param {string} action - Acción en infinitivo, p. ej. 'eliminar las plazas'
+ * @returns {string}
+ */
+function describeFirestoreError(err, action = 'guardar los cambios') {
+    const code = (err && err.code) || '';
+    const raw = String((err && err.message) || '');
+
+    const isOffline = navigator.onLine === false
+        || code === 'unavailable'
+        || code === 'deadline-exceeded'
+        || raw.includes('client is offline');
+
+    if (isOffline) {
+        return `Sin conexión a Internet: no se ha podido ${action}. No se ha cambiado nada. Vuelve a intentarlo cuando tengas señal.`;
+    }
+    if (code === 'aborted' || code === 'failed-precondition') {
+        return `Otra escuela estaba modificando este día justo al mismo tiempo. No se ha cambiado nada. Vuelve a intentarlo.`;
+    }
+    if (code === 'permission-denied') {
+        return `No tienes permisos para ${action}. Cierra sesión y vuelve a entrar.`;
+    }
+    return raw || `No se ha podido ${action}.`;
+}
+
+/**
  * Inicia la escucha en tiempo real de los datos del día seleccionado.
  * @param {string} dateStr - 'YYYY-MM-DD'
  */
@@ -537,6 +566,27 @@ function syncAllocationsFromSalidas(salidas) {
 }
 
 /**
+ * Devuelve la lista de salidas sin el registro indicado. Busca primero por id y,
+ * si no aparece (documentos heredados con ids aleatorios), por código de centro.
+ * @param {Array} salidas
+ * @param {string} salidaId
+ * @param {string} normCode
+ * @returns {{salidas: Array, removed: boolean}}
+ */
+function removeSalidaFromList(salidas, salidaId, normCode) {
+    const list = salidas || [];
+    if (salidaId) {
+        const filtered = list.filter(s => s.id !== salidaId);
+        if (filtered.length !== list.length) return { salidas: filtered, removed: true };
+    }
+    if (normCode) {
+        const filtered = list.filter(s => normCenter(s.centerCode) !== normCode);
+        if (filtered.length !== list.length) return { salidas: filtered, removed: true };
+    }
+    return { salidas: list, removed: false };
+}
+
+/**
  * Añade plazas a un día para una escuela (Section 1).
  * Si la escuela ya tiene plazas ese día, se SUMAN a su total existente (principio aditivo).
  * El límite de entrada es plazas_libres (sin límite de 12).
@@ -777,7 +827,13 @@ async function executeEditSalida(dateStr, salidaId, newPax, newCenterCode = null
 }
 
 /**
- * Elimina las plazas de una escuela en un día optimísticamente en 0ms (Section 2, Opción 3).
+ * Elimina las plazas de una escuela en un día (Section 2, Opción 3).
+ *
+ * Se ejecuta dentro de una transacción atómica: relee el documento del servidor y
+ * elimina ÚNICAMENTE el registro de esa escuela sobre la lista VIVA. Nunca sobrescribe
+ * el día entero con la copia local, que puede estar desactualizada y borraría las
+ * plazas que otras escuelas hayan añadido mientras tanto.
+ *
  * @param {string} dateStr
  * @param {string} salidaId
  * @param {string} [centerCode]
@@ -787,17 +843,16 @@ async function executeDeleteSalida(dateStr, salidaId, centerCode = null) {
     const prevDayCache = monthDaysCache[dateStr] ? JSON.parse(JSON.stringify(monthDaysCache[dateStr])) : null;
     const normCode = centerCode ? normCenter(centerCode) : null;
 
+    if (!salidaId && !normCode) {
+        throw new Error("No se ha indicado qué plazas eliminar.");
+    }
+
     const currentDayData = monthDaysCache[dateStr] || null;
     const dayCap = getDayQuota(dateStr, currentDayData);
 
-    let currentSalidas = getDaySalidas(currentDayData, dateStr);
-    if (salidaId) {
-        currentSalidas = currentSalidas.filter(s => s.id !== salidaId);
-    } else if (normCode) {
-        currentSalidas = currentSalidas.filter(s => normCenter(s.centerCode) !== normCode);
-    }
+    // Actualización optimista en caché y pantalla en 0ms (se revierte si falla la escritura)
+    const currentSalidas = removeSalidaFromList(getDaySalidas(currentDayData, dateStr), salidaId, normCode).salidas;
 
-    // Actualización inmediata en caché y pantalla en 0ms
     monthDaysCache[dateStr] = {
         id: dateStr,
         date: dateStr,
@@ -808,13 +863,28 @@ async function executeDeleteSalida(dateStr, salidaId, centerCode = null) {
     renderAll();
 
     try {
-        await docRef.set({
-            date: dateStr,
-            totalQuota: dayCap,
-            salidas: currentSalidas,
-            allocations: syncAllocationsFromSalidas(currentSalidas),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        await db.runTransaction(async (transaction) => {
+            const liveDoc = await transaction.get(docRef);
+            const liveData = liveDoc.exists ? liveDoc.data() : null;
+            const liveCap = getDayQuota(dateStr, liveData);
+
+            // Elimina sobre la lista viva del servidor, no sobre la copia local
+            const { salidas: liveSalidas, removed } = removeSalidaFromList(
+                getDaySalidas(liveData, dateStr), salidaId, normCode
+            );
+
+            if (!removed) {
+                throw new Error("Estas plazas ya no existen: es posible que se hayan eliminado o movido desde otro dispositivo.");
+            }
+
+            transaction.set(docRef, {
+                date: dateStr,
+                totalQuota: liveCap,
+                salidas: liveSalidas,
+                allocations: syncAllocationsFromSalidas(liveSalidas),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        });
 
         if (currentUserKey !== 'admin') {
             logBdfHistory('delete_salida', {
@@ -830,7 +900,7 @@ async function executeDeleteSalida(dateStr, salidaId, centerCode = null) {
             delete monthDaysCache[dateStr];
         }
         renderAll();
-        throw err;
+        throw new Error(describeFirestoreError(err, 'eliminar las plazas'));
     }
 }
 
