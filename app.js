@@ -725,7 +725,10 @@ function confirmEditSalida() {
     }
 
     const note = sanitizeNote(getEl('edit-salida-note')?.value || '');
-    const newCenterCode = currentUserKey === 'admin' ? getEl('edit-salida-center').value : pendingEditSalida.centerCode;
+    // Sólo el admin puede cambiar una salida de centro. Los demás no mandan
+    // centro ninguno: mandar el suyo propio hacía que el servidor lo tomase por
+    // un intento de cambio y rechazase una edición legítima.
+    const newCenterCode = currentUserKey === 'admin' ? getEl('edit-salida-center').value : null;
     const centerInfo = safeCenter(newCenterCode);
     const dObj = parseDateT00(dateStr);
 

@@ -422,6 +422,32 @@ r = await llama({ op: 'rejectRequest', requestId: 'r3' });
 check('una tercera escuela no pinta nada', r.estado, 403);
 
 
+// -------------------------------------------------------------------------
+section('Editar las plazas propias (regresión del 20/09/2026)');
+
+// La pantalla de edición mandaba el centro del propio registro. El servidor lo
+// tomaba por un intento de cambiar la salida de centro y rechazaba la edición:
+// un centro no podía corregir sus propias plazas.
+prepara([{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }]);
+r = await llama({ op: 'editSalida', dateStr: '2026-07-14', salidaId: 's1', pax: 6, newCenterCode: 'MD' });
+check('mandar tu propio centro no es "cambiar de centro"', r.estado, 200);
+check('y las plazas quedan corregidas', salidasEscritas(), [{ centro: 'MD', plazas: 6 }]);
+
+prepara([{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }]);
+r = await llama({ op: 'editSalida', dateStr: '2026-07-14', salidaId: 's1', pax: 6 });
+check('sin mandar centro, igual', r.estado, 200);
+
+prepara([{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }]);
+r = await llama({ op: 'editSalida', dateStr: '2026-07-14', salidaId: 's1', pax: 6, newCenterCode: 'M' });
+check('pero pasársela a otro centro sigue siendo cosa del admin', r.estado, 403);
+check('y no se escribe', commitsHechos.length, 0);
+
+prepara([{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }], 'admin@visor.local');
+r = await llama({ op: 'editSalida', dateStr: '2026-07-14', salidaId: 's1', pax: 6, newCenterCode: 'M' });
+check('que sí puede', r.estado, 200);
+check('y queda a nombre del otro', salidasEscritas(), [{ centro: 'M', plazas: 6 }]);
+
+
 process.exit(report('ESCRITURAS EN EL SERVIDOR'));
 
 })();

@@ -214,16 +214,16 @@ async function opDeleteSalida(quien, body) {
 
 async function opEditSalida(quien, body) {
     const { dateStr, salidaId, note } = body;
+    let falloEstado = 409;
     const nuevas = parseInt(body.pax, 10);
     if (!validDate(dateStr)) return respond(400, { error: 'Fecha no válida.' });
     if (!Number.isInteger(nuevas) || nuevas <= 0 || nuevas > MAX_BOAT_CAP) {
         return respond(400, { error: `Introduce un número de plazas entre 1 y ${MAX_BOAT_CAP}.` });
     }
-    // Cambiar una salida de centro sólo lo puede hacer el administrador.
+    // Cambiar una salida DE CENTRO sólo lo puede hacer el administrador. Ojo:
+    // que venga un centro no significa que haya cambio; eso sólo se sabe al
+    // comparar con el registro real, más abajo, dentro de la transacción.
     const nuevoCentro = body.newCenterCode ? normCenter(body.newCenterCode) : null;
-    if (nuevoCentro && !quien.isAdmin) {
-        return respond(403, { error: 'Sólo el administrador puede cambiar una salida de centro.' });
-    }
     if (nuevoCentro && !CENTERS[nuevoCentro]) {
         return respond(400, { error: 'Centro desconocido.' });
     }
@@ -241,7 +241,14 @@ async function opEditSalida(quien, body) {
         }
 
         const antes = Number(objetivo.plazas) || 0;
-        if (nuevoCentro && nuevoCentro !== normCenter(objetivo.centerCode)) {
+        const cambiaDeCentro = !!nuevoCentro && nuevoCentro !== normCenter(objetivo.centerCode);
+        if (cambiaDeCentro && !quien.isAdmin) {
+            fallo = 'Sólo el administrador puede cambiar una salida de centro.';
+            falloEstado = 403;
+            return null;
+        }
+
+        if (cambiaDeCentro) {
             // Mover el registro entero a otro centro: se quita de uno y se suma
             // al otro, para no dejar dos registros de la misma escuela.
             const tras = removeSalidaFromList(salidas, objetivo.id, normCenter(objetivo.centerCode));
@@ -266,7 +273,7 @@ async function opEditSalida(quien, body) {
         ];
     });
 
-    if (fallo) return respond(409, { error: fallo });
+    if (fallo) return respond(falloEstado, { error: fallo });
     if (!resultado.ok) return respond(409, { error: 'Otro centro ha cambiado ese día a la vez. Vuelve a intentarlo.', detalle: resultado.detail });
     return respond(200, { ok: true });
 }
