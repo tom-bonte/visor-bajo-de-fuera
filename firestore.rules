@@ -92,12 +92,21 @@ service cloud.firestore {
     // =========================================================================
 
     // Calendario diario
+    //
+    // LAS ESCUELAS YA NO ESCRIBEN AQUÍ. Desde el 20/09/2026 sus cambios pasan
+    // por netlify/functions/bdf-write.js, que comprueba con el token de sesión
+    // quién eres y vuelve a leer el día antes de tocarlo. Esa función usa una
+    // cuenta de servicio, que no pasa por estas reglas.
+    //
+    // Lo que estas reglas hacen ahora es cerrar la puerta de atrás: un centro
+    // con la consola del navegador abierta ya no puede reescribir el día y
+    // borrar los barcos de los demás. Sólo queda abierta la del administrador,
+    // que es una única cuenta de Tom, para el cuadrante CSV y el intercambio
+    // directo; y aun así el día tiene que quedar válido.
     match /bdf_days/{dayId} {
       // Cualquier usuario (incluido modo consulta/invitado) puede leer el calendario
       allow read: if true;
-      // Centros autenticados y admin pueden escribir, siempre que el día quede válido
-      allow create, update: if isSignedIn() && dayWriteValid();
-      // Solo el Administrador puede borrar un día completo
+      allow create, update: if isAdmin() && dayWriteValid();
       allow delete: if isAdmin();
     }
 
@@ -105,12 +114,11 @@ service cloud.firestore {
     match /bdf_history_logs/{logId} {
       // Lectura pública/centros para la pestaña de Historial
       allow read: if true;
-      // Cada centro sólo puede firmar entradas con SU propia clave: así no se
-      // pueden falsificar acciones en nombre de otra escuela.
-      allow create: if isSignedIn()
-                    && (isAdmin()
-                        || ('centerKey' in request.resource.data
-                            && request.resource.data.centerKey == userKey()));
+      // El historial de las escuelas lo escribe la función del servidor, dentro
+      // de la misma operación que cambia las plazas: así el registro no puede
+      // discrepar del dato. Desde el navegador sólo escribe el administrador
+      // (cuadrante CSV, cupos e intercambio directo).
+      allow create: if isAdmin();
       // Historial inmutable salvo para el Admin
       allow update, delete: if isAdmin();
     }
@@ -119,17 +127,12 @@ service cloud.firestore {
     match /bdf_requests/{requestId} {
       allow read: if isSignedIn();
 
-      // Sólo se puede proponer EN NOMBRE PROPIO. Antes, cualquier centro podía
-      // crear una solicitud haciéndose pasar por otro, disparando un mensaje de
-      // WhatsApp y bloqueando las plazas de terceros en su nombre.
-      allow create: if isSignedIn()
-                    && (isAdmin()
-                        || ('initiatorCenter' in request.resource.data
-                            && request.resource.data.initiatorCenter == myCenter()));
-
-      // Aceptar, rechazar, cancelar o caducar: sólo las dos escuelas implicadas
-      // o el Administrador.
-      allow update, delete: if isSignedIn() && (isAdmin() || isRequestParty());
+      // Proponer, aceptar, rechazar y retirar pasan por la función del servidor,
+      // que comprueba que eres quien dices ser y que eres parte de la solicitud.
+      // Desde el navegador no se escribe: así nadie puede crear una propuesta a
+      // nombre de otra escuela (lo que disparaba un WhatsApp firmado por ella)
+      // ni aceptarse a sí mismo las plazas de un tercero.
+      allow create, update, delete: if isAdmin();
     }
 
     // =========================================================================

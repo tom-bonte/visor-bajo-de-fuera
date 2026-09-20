@@ -38,20 +38,36 @@ const day = (salidas) => ({ date: '2026-07-01', totalQuota: 30, salidas, allocat
   });
 
   results.push('\nLo que la app necesita poder hacer');
-  await should('centro escribe su propio día (10 pl.)',            true, M.collection('bdf_days').doc('2026-07-02').set(day([salida('M', 10)])));
-  await should('centro escribe un día con DOS escuelas (permuta)', true, M.collection('bdf_days').doc('2026-07-03').set(day([salida('M', 8), salida('D', 12)])));
-  await should('día justo en el tope de 30 plazas',                true, M.collection('bdf_days').doc('2026-07-04').set(day([salida('M', 12), salida('D', 10), salida('H', 8)])));
-  await should('las 8 escuelas en un mismo día',                   true, M.collection('bdf_days').doc('2026-07-05').set(day(['MD','H','M','N','P','D','C','X'].map(c => salida(c, 3)))));
-  await should('nota normal en una salida',                        true, M.collection('bdf_days').doc('2026-07-06').set(day([salida('M', 5, { note: 'Grupo de Madrid, llegan tarde' })])));
-  await should('centro propone EN SU NOMBRE',                      true, M.collection('bdf_requests').add({ type: 'swap', status: 'pending', initiatorCenter: 'M', targetCenter: 'D' }));
-  await should('el destinatario acepta/rechaza (borra)',           true, D.collection('bdf_requests').doc('req-MD').delete());
-  await should('centro firma el historial con SU clave',           true, M.collection('bdf_history_logs').add({ actionType: 'add_salida', centerKey: 'mangamar', details: {} }));
+  // Las escuelas ya no escriben: sus cambios van por la función del servidor,
+  // que usa una cuenta de servicio y no pasa por estas reglas. Lo que sigue
+  // haciendo falta desde el navegador es LEER, y que el admin pueda usar sus
+  // herramientas (cuadrante CSV, cupos, intercambio directo).
   await should('invitado LEE el calendario',                       true, G.collection('bdf_days').doc('2026-07-01').get());
+  await should('centro LEE las solicitudes',                       true, M.collection('bdf_requests').doc('req-MD').get());
+  await should('cualquiera LEE el historial',                      true, G.collection('bdf_history_logs').get());
+  await should('admin escribe un día (cuadrante CSV)',             true, A.collection('bdf_days').doc('2026-07-02').set(day([salida('M', 10)])));
+  await should('admin escribe un día con DOS escuelas (permuta)',  true, A.collection('bdf_days').doc('2026-07-03').set(day([salida('M', 8), salida('D', 12)])));
+  await should('admin: día justo en el tope de 30 plazas',         true, A.collection('bdf_days').doc('2026-07-04').set(day([salida('M', 12), salida('D', 10), salida('H', 8)])));
+  await should('admin: las 8 escuelas en un mismo día',            true, A.collection('bdf_days').doc('2026-07-05').set(day(['MD','H','M','N','P','D','C','X'].map(c => salida(c, 3)))));
+  await should('admin: nota normal en una salida',                 true, A.collection('bdf_days').doc('2026-07-06').set(day([salida('M', 5, { note: 'Grupo de Madrid, llegan tarde' })])));
+  await should('admin firma el historial',                         true, A.collection('bdf_history_logs').add({ actionType: 'import_csv', centerKey: 'admin', details: {} }));
   await should('admin borra un día entero',                        true, A.collection('bdf_days').doc('2026-07-01').delete());
+
+  results.push('\nLa puerta de atrás, cerrada (lo que motivó todo esto)');
+  // Esto es lo que CUALQUIER escuela podía hacer con la consola abierta: ahora
+  // no. Sus cambios legítimos pasan por el servidor, que sí mira de quién son
+  // las plazas.
+  await should('centro reescribe un día y borra a los demás',     false, M.collection('bdf_days').doc('2026-07-03').set(day([salida('M', 13)])));
+  await should('centro escribe su propio día directamente',       false, M.collection('bdf_days').doc('2026-07-30').set(day([salida('M', 10)])));
+  await should('centro borra las plazas de otra escuela',         false, M.collection('bdf_days').doc('2026-07-04').set(day([salida('M', 12)])));
+  await should('centro crea una solicitud directamente',          false, M.collection('bdf_requests').add({ type: 'swap', status: 'pending', initiatorCenter: 'M', targetCenter: 'D' }));
+  await should('centro borra una solicitud directamente',         false, D.collection('bdf_requests').doc('req-MD').delete());
+  await should('centro escribe en el historial',                  false, M.collection('bdf_history_logs').add({ actionType: 'add_salida', centerKey: 'mangamar', details: {} }));
 
   results.push('\nSuplantación: actuar en nombre de otra escuela');
   await should('propuesta fingiendo ser Islas Hormigas',          false, M.collection('bdf_requests').add({ type: 'swap', status: 'pending', initiatorCenter: 'H', targetCenter: 'D' }));
   await should('historial firmado como otra escuela',             false, M.collection('bdf_history_logs').add({ actionType: 'add_salida', centerKey: 'hormigas', details: {} }));
+  await should('y tampoco firmándolo con la suya',                false, M.collection('bdf_history_logs').add({ actionType: 'add_salida', centerKey: 'mangamar', details: {} }));
   await testEnv.withSecurityRulesDisabled(async (ctx) => { await ctx.firestore().collection('bdf_requests').doc('req-MD2').set({ type: 'request', status: 'pending', initiatorCenter: 'M', targetCenter: 'D', date: '2026-07-01' }); });
   await should('un tercero cancela una propuesta ajena',          false, N.collection('bdf_requests').doc('req-MD2').delete());
   await should('un tercero caduca una propuesta ajena',           false, N.collection('bdf_requests').doc('req-MD2').update({ status: 'expired' }));
@@ -60,14 +76,14 @@ const day = (salidas) => ({ date: '2026-07-01', totalQuota: 30, salidas, allocat
   await should('solicitud sin initiatorCenter',                   false, M.collection('bdf_requests').add({ type: 'swap', status: 'pending', targetCenter: 'D' }));
   await should('entrada de historial sin centerKey',              false, M.collection('bdf_history_logs').add({ actionType: 'add_salida', details: {} }));
 
-  results.push('\nDatos imposibles en un día');
-  await should('el día suma 40 plazas',                           false, M.collection('bdf_days').doc('2026-07-10').set(day([salida('M', 20), salida('D', 20)])));
-  await should('una salida con 99 plazas',                        false, M.collection('bdf_days').doc('2026-07-11').set(day([salida('M', 99)])));
-  await should('una salida con 0 plazas',                         false, M.collection('bdf_days').doc('2026-07-12').set(day([salida('M', 0)])));
-  await should('plazas en texto en vez de número',                false, M.collection('bdf_days').doc('2026-07-13').set(day([salida('M', '10')])));
-  await should('una escuela inventada',                           false, M.collection('bdf_days').doc('2026-07-14').set(day([salida('ZZZ', 5)])));
-  await should('9 registros en un día (hay 8 escuelas)',          false, M.collection('bdf_days').doc('2026-07-15').set(day([...['MD','H','M','N','P','D','C','X'].map(c => salida(c, 1)), salida('M', 1)])));
-  await should('una nota de 500 caracteres',                      false, M.collection('bdf_days').doc('2026-07-16').set(day([salida('M', 5, { note: 'x'.repeat(500) })])));
+  results.push('\nDatos imposibles en un día (la red de seguridad del admin)');
+  await should('el día suma 40 plazas',                           false, A.collection('bdf_days').doc('2026-07-10').set(day([salida('M', 20), salida('D', 20)])));
+  await should('una salida con 99 plazas',                        false, A.collection('bdf_days').doc('2026-07-11').set(day([salida('M', 99)])));
+  await should('una salida con 0 plazas',                         false, A.collection('bdf_days').doc('2026-07-12').set(day([salida('M', 0)])));
+  await should('plazas en texto en vez de número',                false, A.collection('bdf_days').doc('2026-07-13').set(day([salida('M', '10')])));
+  await should('una escuela inventada',                           false, A.collection('bdf_days').doc('2026-07-14').set(day([salida('ZZZ', 5)])));
+  await should('9 registros en un día (hay 8 escuelas)',          false, A.collection('bdf_days').doc('2026-07-15').set(day([...['MD','H','M','N','P','D','C','X'].map(c => salida(c, 1)), salida('M', 1)])));
+  await should('una nota de 500 caracteres',                      false, A.collection('bdf_days').doc('2026-07-16').set(day([salida('M', 5, { note: 'x'.repeat(500) })])));
 
   results.push('\nSin sesión iniciada');
   await should('invitado escribe en el calendario',               false, G.collection('bdf_days').doc('2026-07-20').set(day([salida('M', 5)])));
