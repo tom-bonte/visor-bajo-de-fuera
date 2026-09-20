@@ -20,13 +20,17 @@
  */
 const admin = require('./lib/firestore-admin');
 const { normCenter } = require('../../utils.js');
-const { getDayQuota, MAX_BOAT_CAP, EMAIL_MAP, USER_CENTER_KEYS, CENTERS, BDF_COLLECTIONS } = require('../../config.js');
+const { getDayQuota, MAX_BOAT_CAP, EMAIL_MAP, USER_CENTER_KEYS, CENTERS, BDF_COLLECTIONS, firebaseConfig } = require('../../config.js');
 const {
     addPlazasToSalidas, removeSalidaFromList, sumSalidasPlazas,
     syncAllocationsFromSalidas, applySwapToSalidas, applyTransferToSalidas
 } = require('../../bdf-logic.js');
 
-const FIREBASE_API_KEY = 'AIzaSyBe7X5AUC-PpcJSCYgMzyyUMJMPqxtTdiw';
+// Identificador público del proyecto: se toma de config.js en lugar de
+// repetirlo aquí. Además de no duplicarlo, así este fichero no contiene
+// ninguna cadena con forma de clave de Google, que es lo que hace fallar al
+// escáner de secretos de Netlify al desplegar.
+const FIREBASE_API_KEY = firebaseConfig.apiKey;
 const VERIFY_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:lookup';
 const ADMIN_EMAIL = 'admin@visor.local';
 const MAX_NOTE = 200;

@@ -205,6 +205,12 @@ const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 's
 const WHATSAPP_PROXY_PATH = "/.netlify/functions/notify";
 
 /**
+ * Único camino por el que se escriben las plazas. El navegador ya no escribe en
+ * Firestore: pide al servidor, que comprueba quién eres antes de tocar nada.
+ */
+const BDF_WRITE_PATH = "/.netlify/functions/bdf-write";
+
+/**
  * Configuración de Firebase para reserva-marina-cdp.
  * Las colecciones utilizadas por Bajo de Fuera están estrictamente aisladas con el prefijo "bdf_".
  */
@@ -243,6 +249,6 @@ const BDF_COLLECTIONS = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         DEFAULT_DAILY_CAP, MAX_BOAT_CAP, getDayQuota, CENTERS, safeCenter,
-        EMAIL_MAP, USER_CENTER_KEYS, CENTER_TO_USER_KEY, BDF_COLLECTIONS
+        EMAIL_MAP, USER_CENTER_KEYS, CENTER_TO_USER_KEY, BDF_COLLECTIONS, firebaseConfig
     };
 }
