@@ -35,18 +35,32 @@ async function sendBdfWebhook(msg) {
         console.log("[Admin bypass] No se envían mensajes a WhatsApp en modo Administrador.");
         return;
     }
-    if (!WHATSAPP_WEBHOOK_URL || typeof WHATSAPP_WEBHOOK_URL !== 'string' || WHATSAPP_WEBHOOK_URL.trim() === "") {
-        console.log("[WhatsApp Webhook inactivo] No se envía a ningún grupo. Mensaje preparado:", msg);
+
+    // El aviso pasa por el proxy de Netlify, que guarda la URL real del webhook
+    // y exige un token de sesión válido. Sin sesión no se envía nada.
+    const user = auth.currentUser;
+    if (!user) {
+        console.log("[WhatsApp] Sin sesión iniciada: no se envía el aviso.");
         return;
     }
+
     try {
-        await fetch(WHATSAPP_WEBHOOK_URL, {
+        const idToken = await user.getIdToken();
+        const response = await fetch(WHATSAPP_PROXY_PATH, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+            },
             body: JSON.stringify({ message: msg })
         });
+        if (!response.ok) {
+            let detail = '';
+            try { detail = (await response.json()).error || ''; } catch (e) { /* respuesta sin JSON */ }
+            console.error(`[WhatsApp] El aviso no se pudo enviar (${response.status}). ${detail}`);
+        }
     } catch (e) {
-        console.error("Error en Webhook WhatsApp:", e);
+        console.error("Error enviando el aviso de WhatsApp:", e);
     }
 }
 

@@ -14,6 +14,13 @@
   # guardia con MAKE_WEBHOOK_URL, que sí es un secreto real y se sigue vigilando.
   SECRETS_SCAN_OMIT_KEYS = "FIREBASE_API_KEY"
 
+  # config.js es, por definición, la configuración PÚBLICA del cliente: se
+  # descarga entera en el navegador de cualquiera que abra el visor. El escáner
+  # de secretos la señala por contener una cadena con forma de clave de Google.
+  # Se excluye sólo ese fichero (y el proxy, que contiene la misma apiKey
+  # pública); el resto del despliegue se sigue vigilando.
+  SECRETS_SCAN_OMIT_PATHS = "config.js,netlify/functions/notify.js"
+
 # Proxy autenticado hacia el webhook de WhatsApp (netlify/functions/notify.js).
 # Requiere esta variable de entorno en Netlify → Site settings → Environment variables:
 #   MAKE_WEBHOOK_URL   URL del webhook de Make.com (SECRETA: marcar "Contains secret values")

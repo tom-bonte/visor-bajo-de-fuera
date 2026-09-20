@@ -194,10 +194,15 @@ const MONTHS_ES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 /**
- * Endpoint de webhook para notificaciones WhatsApp a través de Make.com
- * Grupo de WhatsApp: Bajo de Fuera
+ * Ruta del proxy que reenvía los avisos al grupo de WhatsApp.
+ *
+ * La URL real del webhook de Make.com YA NO ESTÁ AQUÍ: vivía en este fichero,
+ * que se sirve público, de modo que cualquiera podía publicar mensajes en el
+ * grupo de la asociación sin cuenta y sin límite. Ahora sólo existe como
+ * variable de entorno en Netlify (MAKE_WEBHOOK_URL), y para llegar a ella hay
+ * que pasar por netlify/functions/notify.js con un token de sesión válido.
  */
-const WHATSAPP_WEBHOOK_URL = "https://hook.eu1.make.com/ar6hrm603xyqs2g9b62v4h4at5fi6l4d";
+const WHATSAPP_PROXY_PATH = "/.netlify/functions/notify";
 
 /**
  * Configuración de Firebase para reserva-marina-cdp.

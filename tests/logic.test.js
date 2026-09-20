@@ -167,4 +167,19 @@ check('ningún día del cuadrante supera su cupo', diasFueraDeCupo, []);
 check('el parser entiende años de 2 dígitos (27 → 2027)', app.normalizeDateStr('5/3/27'), '2027-03-05');
 check('y el formato ISO tal cual', app.normalizeDateStr('2027-03-05'), '2027-03-05');
 
+/* --------------------------------------------------------- AVISOS WHATSAPP */
+section('La URL del webhook ya no viaja al navegador');
+
+const fsWebhook = require('fs');
+const rootFile = (name) => fsWebhook.readFileSync(require('path').join(__dirname, '..', name), 'utf8');
+
+const publicFiles = ['config.js', 'utils.js', 'state.js', 'firebase-service.js', 'export.js', 'ui.js', 'app.js', 'index.html'];
+const conUrlDeMake = publicFiles.filter(f => /hook\.[a-z0-9-]+\.make\.com/i.test(rootFile(f)));
+check('ningún fichero público contiene una URL de Make.com', conUrlDeMake, []);
+
+ok('el cliente apunta al proxy', app.evaluate('WHATSAPP_PROXY_PATH') === '/.netlify/functions/notify');
+ok('sendBdfWebhook exige sesión iniciada', app.sendBdfWebhook.toString().includes('auth.currentUser'));
+ok('sendBdfWebhook manda el token de sesión', app.sendBdfWebhook.toString().includes('getIdToken'));
+ok('el admin sigue sin enviar avisos', app.sendBdfWebhook.toString().includes("currentUserKey === 'admin'"));
+
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));
