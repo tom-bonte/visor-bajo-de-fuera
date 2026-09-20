@@ -10,10 +10,19 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 
 function noop() {}
+/**
+ * Objeto que acepta cualquier llamada y devuelve otro igual, para imitar las
+ * cadenas de Firestore: db.collection(x).where(y).where(z).onSnapshot(...).
+ * Antes devolvía un objeto pelado a la primera llamada y la segunda reventaba,
+ * lo que impedía cargar app.js en los tests.
+ */
 function chainable() {
-    const obj = {};
-    const handler = { get: () => (() => obj) };
-    return new Proxy(obj, handler);
+    const target = function () { return proxy; };
+    const proxy = new Proxy(target, {
+        get: () => (() => proxy),
+        apply: () => proxy
+    });
+    return proxy;
 }
 
 function loadApp() {
@@ -32,8 +41,12 @@ function loadApp() {
         setTimeout, clearTimeout, setInterval, clearInterval,
         navigator: { onLine: true },
         window: {},
+        // Pantalla de mentira: los tests registran sólo los campos que necesitan
+        // con setElement('edit-salida-pax', { value: '4' }). Lo no registrado
+        // devuelve null, igual que un id que no existe en la página real.
+        __elements: {},
         document: {
-            getElementById: () => null,
+            getElementById: (id) => sandbox.__elements[id] || null,
             querySelector: () => null,
             querySelectorAll: () => [],
             addEventListener: noop,
@@ -53,7 +66,7 @@ function loadApp() {
     sandbox.window = sandbox;
     vm.createContext(sandbox);
 
-    for (const file of ['config.js', 'utils.js', 'bdf-logic.js', 'state.js', 'firebase-service.js']) {
+    for (const file of ['config.js', 'utils.js', 'bdf-logic.js', 'state.js', 'firebase-service.js', 'ui.js', 'export.js', 'app.js']) {
         const code = fs.readFileSync(path.join(ROOT, file), 'utf8');
         vm.runInContext(code, sandbox, { filename: file });
     }
@@ -62,6 +75,18 @@ function loadApp() {
     // del objeto global del contexto (sólo las `function` y `var`), así que para
     // leerlas desde los tests hace falta evaluar dentro del propio contexto.
     sandbox.evaluate = (expression) => vm.runInContext(expression, sandbox);
+
+    /** Añade un campo a la pantalla de mentira. */
+    sandbox.setElement = (id, props = {}) => {
+        sandbox.__elements[id] = {
+            value: '', textContent: '', innerHTML: '', disabled: false,
+            classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
+            setAttribute: noop, querySelector: () => null, isConnected: true,
+            style: {}, focus: noop, dataset: {}, appendChild: noop,
+            ...props
+        };
+        return sandbox.__elements[id];
+    };
 
     return sandbox;
 }
