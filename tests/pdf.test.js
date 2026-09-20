@@ -150,4 +150,20 @@ ok('cada mes añade su página', /doc\.addPage\('a4', 'l'\)/.test(exportSrc));
 ok('con el nombre del mes en la cabecera', /MONTHS_ES\[month\]\.toUpperCase\(\)/.test(exportSrc));
 ok('y el fichero se llama Cuadrante', /Cuadrante_BajoDeFuera_/.test(exportSrc));
 
+// -------------------------------------------------------------------------
+section('Lo pesado no se descarga hasta que hace falta');
+
+const indexSrc = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+check('jsPDF ya no se carga al abrir la app', /<script src="https:\/\/cdnjs[^"]*jspdf/.test(indexSrc), false);
+ok('se pide cuando se va a exportar', /await ensureJsPDF\(\)/.test(exportSrc));
+ok('y si no se puede cargar, se avisa en castellano', /No se ha podido cargar el generador de PDF/.test(exportSrc));
+ok('el ayudante de arrastre se sirve desde el propio sitio', /src="DragDropTouch\.js/.test(indexSrc));
+check('y ya no desde la web personal de un tercero', /bernardo-castilho\.github\.io/.test(indexSrc), false);
+
+const servicioSrc = fs.readFileSync(path.join(__dirname, '..', 'firebase-service.js'), 'utf8');
+ok('Firestore detecta las redes que cortan el streaming',
+    /experimentalAutoDetectLongPolling: true/.test(servicioSrc));
+ok('y se configura antes de usar la base de datos',
+    servicioSrc.indexOf('db.settings(') < servicioSrc.indexOf('enablePersistence'));
+
 process.exit(report('CUADRANTE EN PDF'));

@@ -286,6 +286,33 @@ async function executePrintCSV() {
 }
 
 /**
+ * Carga jsPDF sólo cuando de verdad se va a generar un PDF.
+ *
+ * Son 364 KB: casi la mitad de todo lo que descargaba la app al abrirse, para
+ * una función que la mayoría de los días no usa nadie. Cargarlo al abrir
+ * penalizaba a las ocho escuelas para que una pudiera imprimir el cuadrante.
+ */
+const JSPDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+let jsPdfPromise = null;
+
+function ensureJsPDF() {
+    if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve();
+    if (jsPdfPromise) return jsPdfPromise;
+
+    jsPdfPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = JSPDF_URL;
+        script.onload = () => resolve();
+        script.onerror = () => {
+            jsPdfPromise = null;
+            reject(new Error('No se ha podido cargar el generador de PDF. Comprueba tu conexión.'));
+        };
+        document.head.appendChild(script);
+    });
+    return jsPdfPromise;
+}
+
+/**
  * Dibuja un mes completo como calendario, igual que se ve en la app: una
  * columna por día de la semana, una fila por semana, y dentro de cada día las
  * pastillas de color de cada escuela con sus plazas.
@@ -442,6 +469,13 @@ async function executePrintPDF() {
 
     if (meses.length === 0 || !hayDatos) {
         showToast('Sin Datos', 'No hay registros para los filtros seleccionados.', true);
+        return;
+    }
+
+    try {
+        await ensureJsPDF();
+    } catch (e) {
+        showToast('Error', friendlyError(e, 'preparar el generador de PDF'), true);
         return;
     }
 

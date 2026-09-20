@@ -31,7 +31,8 @@ function loadApp() {
         doc: () => chainable(),
         batch: () => chainable(),
         runTransaction: async () => {},
-        enablePersistence: () => Promise.resolve()
+        enablePersistence: () => Promise.resolve(),
+        settings: () => {}
     });
     firestoreFn.FieldPath = { documentId: noop };
     firestoreFn.FieldValue = { serverTimestamp: () => '__TS__', delete: noop };

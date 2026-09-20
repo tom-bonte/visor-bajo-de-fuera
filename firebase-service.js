@@ -9,6 +9,20 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+/**
+ * Firestore habla por defecto con un canal en streaming (WebChannel). Hay redes
+ * —datos móviles, wifis de hotel, antivirus y proxys de empresa— que cortan ese
+ * tipo de conexión. Cuando eso pasa, el cliente NO se da cuenta enseguida: se
+ * queda esperando a que venza un tiempo de espera, que puede ser de medio minuto,
+ * y sólo entonces prueba con el método clásico. Mientras tanto el calendario se
+ * ve vacío y parece que la app no arranca. Era el motivo de que a alguna gente
+ * le tardase 30 segundos en abrir.
+ *
+ * Con esto, Firestore detecta la red rara al momento y cambia de método sin
+ * esperar. Tiene que ir ANTES de cualquier otro uso de la base de datos.
+ */
+db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
+
 // Habilitar persistencia offline con soporte multi-pestaña para IndexedDB
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
     if (err.code === 'failed-precondition') {

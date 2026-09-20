@@ -17,7 +17,7 @@
 
     <!-- Alarma de fallos: PRIMER script de la página, para que también queden
          registrados los errores de Tailwind, Firebase o de la propia config. -->
-    <script src="error-reporter.js?v=7.5"></script>
+    <script src="error-reporter.js?v=7.6"></script>
 
     <!-- Tailwind CSS CDN (con filtro de advertencia de producción en consola) -->
     <script>
@@ -37,13 +37,14 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
     <!-- Polyfill to enable native HTML5 Drag and Drop API on Mobile Touch screens -->
-    <script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
+    <script src="DragDropTouch.js?v=7.6"></script>
 
     <!-- jsPDF UMD (Exportación de PDF Vectorial) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- jsPDF (364 KB) ya NO se carga aquí: sólo hace falta al exportar un PDF,
+         y lo pide export.js en ese momento. -->
 
     <!-- Global Styles -->
-    <link rel="stylesheet" href="styles.css?v=7.5">
+    <link rel="stylesheet" href="styles.css?v=7.6">
 </head>
 
 <body class="p-2 md:p-6 text-slate-800 flex flex-col min-h-[100dvh] bg-slate-50 md:bg-[#f4f7f6] w-full max-w-full overflow-x-hidden">
@@ -1049,14 +1050,14 @@
     </div>
 
     <!-- Carga de Scripts -->
-    <script src="config.js?v=7.5"></script>
-    <script src="utils.js?v=7.5"></script>
-    <script src="bdf-logic.js?v=7.5"></script>
-    <script src="state.js?v=7.5"></script>
-    <script src="firebase-service.js?v=7.5"></script>
-    <script src="export.js?v=7.5"></script>
-    <script src="ui.js?v=7.5"></script>
-    <script src="app.js?v=7.5"></script>
+    <script src="config.js?v=7.6"></script>
+    <script src="utils.js?v=7.6"></script>
+    <script src="bdf-logic.js?v=7.6"></script>
+    <script src="state.js?v=7.6"></script>
+    <script src="firebase-service.js?v=7.6"></script>
+    <script src="export.js?v=7.6"></script>
+    <script src="ui.js?v=7.6"></script>
+    <script src="app.js?v=7.6"></script>
 
     <!-- Registro de Service Worker (PWA y modo offline) -->
     <script>
