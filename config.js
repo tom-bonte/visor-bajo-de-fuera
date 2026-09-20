@@ -249,6 +249,6 @@ const BDF_COLLECTIONS = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         DEFAULT_DAILY_CAP, MAX_BOAT_CAP, getDayQuota, CENTERS, safeCenter,
-        EMAIL_MAP, USER_CENTER_KEYS, CENTER_TO_USER_KEY, BDF_COLLECTIONS
+        EMAIL_MAP, USER_CENTER_KEYS, CENTER_TO_USER_KEY, BDF_COLLECTIONS, firebaseConfig
     };
 }
