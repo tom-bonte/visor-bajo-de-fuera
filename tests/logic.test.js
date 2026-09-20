@@ -183,4 +183,31 @@ ok('sendBdfWebhook manda el token de sesión', app.sendBdfWebhook.toString().inc
 ok('el admin sigue sin enviar avisos', app.sendBdfWebhook.toString().includes("currentUserKey === 'admin'"));
 ok('en local no se envía nada al grupo real', app.sendBdfWebhook.toString().includes("location.hostname === 'localhost'"));
 
+
+// -------------------------------------------------------------------------
+section('El navegador ya no escribe las plazas');
+
+const leer = f => require('fs').readFileSync(require('path').join(__dirname, '..', f), 'utf8');
+const servicioSrc = leer('firebase-service.js');
+const appSrc = leer('app.js');
+const configSrc2 = leer('config.js');
+
+ok('existe el camino único hacia el servidor', /function callBdfWrite\(/.test(servicioSrc));
+ok('con su ruta en config.js', /BDF_WRITE_PATH\s*=\s*"\/\.netlify\/functions\/bdf-write"/.test(configSrc2));
+ok('manda el token de sesión', /Authorization: `Bearer \$\{idToken\}`/.test(servicioSrc));
+
+['addSalida', 'editSalida', 'deleteSalida', 'moveSalida', 'spotTransfer',
+ 'createRequest', 'acceptRequest', 'cancelRequest', 'rejectRequest'].forEach(op => {
+    ok(`${op} pasa por el servidor`, new RegExp(`callBdfWrite\\('${op}'`).test(servicioSrc));
+});
+
+// Las transacciones que quedan en el navegador son sólo de administrador.
+const transaccionesCliente = (servicioSrc.match(/db\.runTransaction\(/g) || []).length;
+check('sólo queda una transacción de navegador (el intercambio directo del admin)', transaccionesCliente, 1);
+ok('y sigue siendo la del admin', /executeSwapSalidas[\s\S]{0,4000}db\.runTransaction\(/.test(servicioSrc));
+
+ok('el historial de las solicitudes ya no se duplica desde el navegador', !/logBdfHistory\('petition'/.test(appSrc));
+ok('el navegador ya no caduca solicitudes ajenas', !/status: 'expired'/.test(servicioSrc));
+ok('en local se avisa en vez de fallar raro', /servidor de pruebas local/.test(servicioSrc));
+
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));

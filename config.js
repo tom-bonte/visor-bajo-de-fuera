@@ -205,6 +205,12 @@ const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 's
 const WHATSAPP_PROXY_PATH = "/.netlify/functions/notify";
 
 /**
+ * Único camino por el que se escriben las plazas. El navegador ya no escribe en
+ * Firestore: pide al servidor, que comprueba quién eres antes de tocar nada.
+ */
+const BDF_WRITE_PATH = "/.netlify/functions/bdf-write";
+
+/**
  * Configuración de Firebase para reserva-marina-cdp.
  * Las colecciones utilizadas por Bajo de Fuera están estrictamente aisladas con el prefijo "bdf_".
  */

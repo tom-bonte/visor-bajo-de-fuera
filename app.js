@@ -1227,13 +1227,8 @@ function confirmDonationRequest() {
                 isFull: isFull
             });
             sendBdfWebhook(msg).catch(console.error);
-            logBdfHistory('petition', {
-                date: dateStr,
-                fromCenter: myCode,
-                toCenter: targetCenterCode,
-                slots: requestedPax,
-                isFull
-            }).catch(console.error);
+            // El registro en el historial lo escribe ya el servidor, dentro de la
+            // misma operación que crea la solicitud.
         } catch (err) {
             console.error("Error enviando petición:", err);
             showNotification('Error', err.message, true);
@@ -1656,10 +1651,8 @@ function executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, 
             });
             sendBdfWebhook(msg).catch(console.error);
             showToast('Propuesta Enviada', `Propuesta enviada a ${targetInfo.name}.`);
-            logBdfHistory('swap_request', {
-                dateA, dateB, centerA: normA, centerB: normB, paxA: safeA, retainedPaxA: retainedA, paxB: safeB, retainedPaxB: retainedB,
-                initiatorCenter: myCode, targetCenter
-            }).catch(console.error);
+            // El registro en el historial lo escribe ya el servidor, dentro de la
+            // misma operación que crea la solicitud.
         } catch (err) {
             console.error("Error enviando propuesta de intercambio:", err);
             showNotification('Error', err.message, true);
