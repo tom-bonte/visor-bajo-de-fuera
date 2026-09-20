@@ -1,5 +1,5 @@
 // Service Worker para Visor Bajo de Fuera (PWA & Offline App Shell)
-const CACHE_NAME = 'bdf-cache-v6.4';
+const CACHE_NAME = 'bdf-cache-v6.5';
 
 const PRECACHE_ASSETS = [
     './',

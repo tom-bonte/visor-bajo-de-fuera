@@ -588,7 +588,7 @@ function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
             <button onclick="rejectBdfRequest('${pendingReq.id}')" class="px-3.5 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors cursor-pointer">
                 Denegar
             </button>
-            <button onclick="acceptBdfRequest('${pendingReq.id}')" class="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm cursor-pointer flex items-center gap-1.5">
+            <button onclick="acceptBdfRequest('${pendingReq.id}', this)" class="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm cursor-pointer flex items-center gap-1.5">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                 Aceptar
             </button>

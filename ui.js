@@ -1009,7 +1009,7 @@ function renderNotificationsList() {
                             class="flex-1 px-3 py-2 bg-white border border-slate-200 hover:bg-red-50 text-red-600 text-xs font-bold rounded-lg transition-colors cursor-pointer">
                             Rechazar
                         </button>
-                        <button onclick="acceptBdfRequest('${req.id}')"
+                        <button onclick="acceptBdfRequest('${req.id}', this)"
                             class="flex-1 px-3 py-2 bg-[#25D366] hover:bg-[#1ebd5a] text-white text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer">
                             Aceptar Cambio
                         </button>
@@ -1062,7 +1062,7 @@ function renderNotificationsList() {
                             class="flex-1 px-3 py-2 bg-white border border-slate-200 hover:bg-red-50 text-red-600 text-xs font-bold rounded-lg transition-colors cursor-pointer">
                             ${isDonation ? 'Rechazar' : 'Denegar'}
                         </button>
-                        <button onclick="acceptBdfRequest('${req.id}')"
+                        <button onclick="acceptBdfRequest('${req.id}', this)"
                             class="flex-1 px-3 py-2 bg-[#25D366] hover:bg-[#1ebd5a] text-white text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer">
                             ${isDonation ? 'Aceptar Plazas' : 'Ceder Plazas'}
                         </button>
