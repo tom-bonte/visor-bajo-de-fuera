@@ -76,6 +76,17 @@ service cloud.firestore {
           || salidasValid(request.resource.data.salidas);
     }
 
+    // ¿Soy una de las dos escuelas nombradas en la solicitud?
+    // Comprueba la existencia del documento y de los campos: si se evalúa
+    // `resource.data.x` sobre un documento inexistente la regla no devuelve
+    // false, sino un ERROR de evaluación (deniega igual, pero ensucia los
+    // registros y es más difícil de razonar).
+    function isRequestParty() {
+      return resource != null
+          && (('initiatorCenter' in resource.data && resource.data.initiatorCenter == myCenter())
+           || ('targetCenter' in resource.data && resource.data.targetCenter == myCenter()));
+    }
+
     // =========================================================================
     // 1. VISOR BAJO DE FUERA
     // =========================================================================
@@ -97,7 +108,9 @@ service cloud.firestore {
       // Cada centro sólo puede firmar entradas con SU propia clave: así no se
       // pueden falsificar acciones en nombre de otra escuela.
       allow create: if isSignedIn()
-                    && (isAdmin() || request.resource.data.centerKey == userKey());
+                    && (isAdmin()
+                        || ('centerKey' in request.resource.data
+                            && request.resource.data.centerKey == userKey()));
       // Historial inmutable salvo para el Admin
       allow update, delete: if isAdmin();
     }
@@ -110,14 +123,13 @@ service cloud.firestore {
       // crear una solicitud haciéndose pasar por otro, disparando un mensaje de
       // WhatsApp y bloqueando las plazas de terceros en su nombre.
       allow create: if isSignedIn()
-                    && (isAdmin() || request.resource.data.initiatorCenter == myCenter());
+                    && (isAdmin()
+                        || ('initiatorCenter' in request.resource.data
+                            && request.resource.data.initiatorCenter == myCenter()));
 
       // Aceptar, rechazar, cancelar o caducar: sólo las dos escuelas implicadas
       // o el Administrador.
-      allow update, delete: if isSignedIn()
-                            && (isAdmin()
-                                || resource.data.initiatorCenter == myCenter()
-                                || resource.data.targetCenter == myCenter());
+      allow update, delete: if isSignedIn() && (isAdmin() || isRequestParty());
     }
 
     // =========================================================================
