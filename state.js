@@ -7,15 +7,19 @@
    ESTADO GLOBAL
    ========================================================================= */
 
-/** Fecha seleccionada (por defecto hoy, o configurada a Julio 2026 si estamos probando la temporada). */
+/** Fecha seleccionada (por defecto, hoy). */
 let currentDate = new Date();
 
-/** Año y Mes actualmente visualizados en el calendario principal. */
-let currentYear = 2026;
-let currentMonth = (currentDate.getFullYear() === 2026) ? currentDate.getMonth() : 8; // Septiembre por defecto si el reloj no está en 2026
+/**
+ * Año y mes visualizados en el calendario. Se parte SIEMPRE del año real del
+ * sistema: la temporada no está fijada a ningún año concreto, de modo que el
+ * visor sigue funcionando en 2027 y siguientes sin tocar el código.
+ */
+let currentYear = currentDate.getFullYear();
+let currentMonth = currentDate.getMonth();
 
-/** Estado de acordeones de años en la barra lateral ('2026' => boolean). */
-let expandedYears = { 2026: true };
+/** Estado de acordeones de años en la barra lateral (año => boolean). */
+let expandedYears = { [currentYear]: true };
 
 /** Modo de visualización activo: 'mensual' | 'estadisticas' | 'historial'. */
 let activeViewMode = 'mensual';

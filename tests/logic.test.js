@@ -136,4 +136,35 @@ ok('ninguna entrada rara produce un nombre con HTML',
 ok('escapeHtml neutraliza el payload', escapeHtml(PAYLOAD) === '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
 ok('escapeHtml también las comillas simples', escapeHtml("' onmouseover='x").includes('&#039;'));
 
+/* ------------------------------------------------------------- TEMPORADA */
+section('La temporada no está fijada a ningún año');
+
+const hoy = new Date();
+check('el año inicial es el del sistema, no 2026', app.evaluate('currentYear'), hoy.getFullYear());
+check('el mes inicial es el de hoy', app.evaluate('currentMonth'), hoy.getMonth());
+ok('el acordeón del año arranca abierto para el año actual', app.evaluate('expandedYears')[hoy.getFullYear()] === true);
+
+// Las reglas de cupo son por mes y día: deben dar lo mismo en cualquier año.
+ok('el cupo depende de la fecha, no del año',
+    [2026, 2027, 2030].every(y => getDayQuota(`${y}-07-15`) === 30 && getDayQuota(`${y}-02-10`) === 13));
+
+/* ------------------------------------------------------------------- CSV */
+section('Cuadrante oficial en CSV');
+
+const fs = require('fs');
+const csv = fs.readFileSync(require('path').join(__dirname, '..', 'bajo_de_fuera_2026_schedule.csv'), 'utf8');
+const parsed = app.parseCsvSchedule(csv);
+
+check('se parsean todas las filas, ninguna ignorada', parsed.ignoredRows, 0);
+ok('cubre un solo año', new Set(Object.keys(parsed.daysMap).map(d => d.slice(0, 4))).size === 1);
+
+const diasFueraDeCupo = Object.keys(parsed.salidasMap).filter(d => {
+    const total = parsed.salidasMap[d].reduce((sum, x) => sum + (Number(x.plazas) || 0), 0);
+    return total > getDayQuota(d, {});
+});
+check('ningún día del cuadrante supera su cupo', diasFueraDeCupo, []);
+
+check('el parser entiende años de 2 dígitos (27 → 2027)', app.normalizeDateStr('5/3/27'), '2027-03-05');
+check('y el formato ISO tal cual', app.normalizeDateStr('2027-03-05'), '2027-03-05');
+
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));

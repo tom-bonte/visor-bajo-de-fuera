@@ -103,15 +103,18 @@ function renderHeader() {
 }
 
 /**
- * Renderiza la barra lateral izquierda: Año 2026 (con acordeón de meses) y botón Este Mes.
+ * Renderiza la barra lateral izquierda: acordeón de meses del año seleccionado.
  */
 function renderLeftNavigation() {
-    const list = getEl('year-months-list-2026');
-    const chevron = getEl('year-chevron-2026');
-    const yearBtn = getEl('year-btn-2026');
+    const list = getEl('year-months-list');
+    const chevron = getEl('year-chevron');
+    const yearBtn = getEl('year-btn');
+    const yearLabel = getEl('year-label');
     if (!list) return;
 
-    const isExpanded = expandedYears[2026] !== false;
+    if (yearLabel) yearLabel.textContent = currentYear;
+
+    const isExpanded = expandedYears[currentYear] !== false;
     if (chevron) {
         chevron.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
     }
@@ -130,8 +133,8 @@ function renderLeftNavigation() {
 
     let html = '';
     for (let m = 0; m < 12; m++) {
-        const isSelected = (currentYear === 2026 && currentMonth === m);
-        const isCurrentCalendarMonth = (todayYear === 2026 && todayMonth === m);
+        const isSelected = (currentMonth === m);
+        const isCurrentCalendarMonth = (todayYear === currentYear && todayMonth === m);
 
         let btnClass = '';
         if (isSelected) {
@@ -141,7 +144,7 @@ function renderLeftNavigation() {
         }
 
         html += `
-            <button onclick="selectMonth(${m}, 2026)"
+            <button onclick="selectMonth(${m}, ${currentYear})"
                 class="w-full px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-all ${btnClass} cursor-pointer">
                 <span>${MONTHS_ES[m]}</span>
                 ${isCurrentCalendarMonth ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'}">HOY</span>` : ''}

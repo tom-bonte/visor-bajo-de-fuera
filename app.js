@@ -118,12 +118,27 @@ function switchView(mode) {
     renderAll();
 }
 
-function toggleYearMonths(year = 2026) {
+function toggleYearMonths(year = currentYear) {
     expandedYears[year] = !expandedYears[year];
     renderLeftNavigation();
 }
 
-function selectMonth(m, y = 2026) {
+/**
+ * Cambia el año visible en la barra lateral manteniendo el mes seleccionado.
+ * @param {number} delta - -1 o +1
+ */
+function changeYear(delta) {
+    currentYear += delta;
+    expandedYears[currentYear] = true;
+    currentDate = new Date(currentYear, currentMonth, 1);
+    if (activeViewMode === 'historial') {
+        activeViewMode = 'mensual';
+    }
+    refreshRangeListener();
+    renderAll();
+}
+
+function selectMonth(m, y = currentYear) {
     currentMonth = m;
     currentYear = y;
     currentDate = new Date(currentYear, currentMonth, 1);
@@ -156,11 +171,11 @@ function changeMonth(delta) {
 
 function goToCurrentMonth() {
     const now = new Date();
-    currentYear = 2026;
-    currentMonth = (now.getFullYear() === 2026) ? now.getMonth() : 8; // Septiembre por defecto si el reloj no está en 2026
-    currentDate = new Date(currentYear, currentMonth, (now.getFullYear() === 2026) ? now.getDate() : 14);
+    currentYear = now.getFullYear();
+    currentMonth = now.getMonth();
+    currentDate = new Date(currentYear, currentMonth, now.getDate());
     activeViewMode = 'mensual'; // Salir automáticamente de estadísticas o historial y mostrar el mes actual
-    expandedYears[2026] = true;
+    expandedYears[currentYear] = true;
     refreshRangeListener();
     renderAll();
 
@@ -1859,9 +1874,48 @@ function processCsvText(text) {
             }).join('');
         }
 
+        // Años afectados: el import SÓLO escribe las fechas que vienen en el CSV,
+        // así que el resto de temporadas quedan intactas. Se muestra explícitamente
+        // para que quede claro antes de pulsar Importar.
+        const years = [...new Set(Object.keys(parsed.daysMap).map(d => d.slice(0, 4)))].sort();
+        const yearsEl = getEl('csv-preview-years');
+        if (yearsEl) {
+            yearsEl.textContent = years.length === 1
+                ? `Sólo se modificarán fechas de ${years[0]}. El resto de años no se tocan.`
+                : `Años afectados: ${years.join(', ')}. Ningún otro año se modifica.`;
+        }
+
+        // Días que superan el cupo. Los de más de 30 los RECHAZA el servidor, así
+        // que conviene verlos antes de lanzar la importación y no a mitad.
+        const overQuota = [];
+        const overHardCap = [];
+        Object.keys(parsed.salidasMap).sort().forEach(dateStr => {
+            const total = parsed.salidasMap[dateStr].reduce((sum, sal) => sum + (Number(sal.plazas) || 0), 0);
+            const quota = getDayQuota(dateStr, {});
+            if (total > 30) overHardCap.push(`${dateStr} (${total})`);
+            else if (total > quota) overQuota.push(`${dateStr}: ${total} de ${quota}`);
+        });
+
+        const warnEl = getEl('csv-preview-warnings');
+        if (warnEl) {
+            let warnHtml = '';
+            if (overHardCap.length) {
+                warnHtml += `<p class="font-black text-red-700 mb-1">⛔ ${overHardCap.length} día(s) superan el máximo absoluto de 30 plazas. El servidor rechazará la importación completa:</p><p class="mb-2">${escapeHtml(overHardCap.slice(0, 8).join(' · '))}${overHardCap.length > 8 ? ' …' : ''}</p>`;
+            }
+            if (overQuota.length) {
+                warnHtml += `<p class="font-black mb-1">⚠️ ${overQuota.length} día(s) superan el cupo de su fecha:</p><p>${escapeHtml(overQuota.slice(0, 8).join(' · '))}${overQuota.length > 8 ? ' …' : ''}</p>`;
+            }
+            if (warnHtml) {
+                warnEl.innerHTML = warnHtml;
+                showEl('csv-preview-warnings');
+            } else {
+                hideEl('csv-preview-warnings');
+            }
+        }
+
         showEl('csv-preview-container');
         const btn = getEl('btn-do-import-csv');
-        if (btn) btn.disabled = false;
+        if (btn) btn.disabled = overHardCap.length > 0;
     } catch (e) {
         hideEl('csv-preview-container');
         const btn = getEl('btn-do-import-csv');

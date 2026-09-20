@@ -49,10 +49,10 @@ function openPrintModal() {
     selectExportFormat('pdf');
 
     // Selector de Mes
-    let mHtml = '<option value="all">Todos los meses (2026)</option>';
+    let mHtml = `<option value="all">Todos los meses (${currentYear})</option>`;
     for (let i = 0; i < 12; i++) {
         const isSelected = i === currentMonth ? 'selected' : '';
-        mHtml += `<option value="${i}" ${isSelected}>${MONTHS_ES[i]} 2026</option>`;
+        mHtml += `<option value="${i}" ${isSelected}>${MONTHS_ES[i]} ${currentYear}</option>`;
     }
     const monthSelect = getEl('print-month');
     if (monthSelect) monthSelect.innerHTML = mHtml;
@@ -187,9 +187,9 @@ async function getExportDaysData(monthVal) {
         let query = db.collection(BDF_COLLECTIONS.DAYS);
         if (monthVal !== 'all') {
             const m = String(parseInt(monthVal, 10) + 1).padStart(2, '0');
-            query = query.where('date', '>=', `2026-${m}-01`).where('date', '<=', `2026-${m}-31`);
+            query = query.where('date', '>=', `${currentYear}-${m}-01`).where('date', '<=', `${currentYear}-${m}-31`);
         } else {
-            query = query.where('date', '>=', '2026-01-01').where('date', '<=', '2026-12-31');
+            query = query.where('date', '>=', `${currentYear}-01-01`).where('date', '<=', `${currentYear}-12-31`);
         }
         const snap = await query.get();
         snap.forEach(doc => {
@@ -270,7 +270,7 @@ async function executePrintCSV() {
         l.setAttribute("href", url);
 
         const centerLabel = centerVal === 'all' ? 'Todos' : (CENTERS[centerVal]?.name || centerVal);
-        const monthLabel = monthVal === 'all' ? '2026' : `${MONTHS_SHORT[parseInt(monthVal, 10)]}_2026`;
+        const monthLabel = monthVal === 'all' ? String(currentYear) : `${MONTHS_SHORT[parseInt(monthVal, 10)]}_${currentYear}`;
         l.setAttribute("download", `Planificacion_BajoDeFuera_${centerLabel}_${monthLabel}.csv`);
 
         document.body.appendChild(l);
@@ -343,10 +343,10 @@ async function executePrintPDF() {
                 doc.setFontSize(9);
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(148, 163, 184); // slate-400
-                doc.text("PLANIFICACIÓN OFICIAL BAJO DE FUERA 2026", marginX + 14, currentY + 32);
+                doc.text(`PLANIFICACIÓN OFICIAL BAJO DE FUERA ${currentYear}`, marginX + 14, currentY + 32);
 
                 const cText = centerVal === 'all' ? 'TODOS LOS CENTROS' : (CENTERS[centerVal]?.name || centerVal).toUpperCase();
-                const mText = monthVal === 'all' ? 'TEMPORADA 2026' : `${MONTHS_ES[parseInt(monthVal, 10)]} 2026`;
+                const mText = monthVal === 'all' ? `TEMPORADA ${currentYear}` : `${MONTHS_ES[parseInt(monthVal, 10)]} ${currentYear}`;
                 doc.setFontSize(8);
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(56, 189, 248); // sky-400
@@ -496,7 +496,7 @@ async function executePrintPDF() {
             renderFooter(pageNumber);
 
             const centerFile = centerVal === 'all' ? 'Todos' : (CENTERS[centerVal]?.name || centerVal);
-            const monthFile = monthVal === 'all' ? '2026' : `${MONTHS_SHORT[parseInt(monthVal, 10)]}_2026`;
+            const monthFile = monthVal === 'all' ? String(currentYear) : `${MONTHS_SHORT[parseInt(monthVal, 10)]}_${currentYear}`;
             doc.save(`Planificacion_BajoDeFuera_${centerFile}_${monthFile}.pdf`);
 
             showToast('PDF Descargado', 'Documento PDF generado y descargado correctamente.');

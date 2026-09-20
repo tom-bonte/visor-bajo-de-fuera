@@ -39,7 +39,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <!-- Global Styles -->
-    <link rel="stylesheet" href="styles.css?v=6.7">
+    <link rel="stylesheet" href="styles.css?v=6.8">
 </head>
 
 <body class="p-2 md:p-6 text-slate-800 flex flex-col min-h-[100dvh] bg-slate-50 md:bg-[#f4f7f6] w-full max-w-full overflow-x-hidden">
@@ -202,21 +202,30 @@
         <!-- Barra Lateral Izquierda (Navegación de Año y Meses en escritorio) -->
         <aside class="hidden md:flex md:w-44 lg:w-48 shrink-0 flex-col gap-2.5">
 
-            <!-- Bloque Acordeón del Año 2026 -->
+            <!-- Bloque Acordeón del Año (el año se rellena en renderLeftNavigation) -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col w-full">
-                <button id="year-btn-2026" onclick="toggleYearMonths(2026)"
-                    class="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border-slate-200 flex items-center justify-between text-xs font-black text-slate-800 transition-colors cursor-pointer select-none">
-                    <span class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-                        <span class="tracking-wide">2026</span>
-                    </span>
-                    <svg id="year-chevron-2026" class="w-3.5 h-3.5 text-slate-500 transform transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                </button>
+                <div id="year-btn"
+                    class="w-full bg-slate-50 border-slate-200 flex items-center justify-between text-xs font-black text-slate-800 select-none">
+                    <button onclick="changeYear(-1)" title="Año anterior"
+                        class="px-2 py-2.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                    <button onclick="toggleYearMonths()"
+                        class="flex-1 min-w-0 px-1 py-2.5 hover:bg-slate-100 flex items-center justify-center gap-2 transition-colors cursor-pointer">
+                        <span class="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
+                        <span class="tracking-wide" id="year-label">2026</span>
+                        <svg id="year-chevron" class="w-3.5 h-3.5 text-slate-500 transform transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+                    <button onclick="changeYear(1)" title="Año siguiente"
+                        class="px-2 py-2.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
 
-                <!-- Lista de Botones de Meses de 2026 -->
-                <div id="year-months-list-2026" class="p-1.5 flex flex-col gap-1">
+                <!-- Lista de Botones de Meses del año seleccionado -->
+                <div id="year-months-list" class="p-1.5 flex flex-col gap-1">
                     <!-- Generado dinámicamente por renderLeftNavigation() en ui.js -->
                 </div>
             </div>
@@ -713,8 +722,8 @@
             <!-- Botón pre-cargado: Cuadrante Oficial 2026 -->
             <div class="mb-4 bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex items-center justify-between gap-2">
                 <div>
-                    <p class="text-xs font-black text-blue-900">Cuadrante Oficial 2026 (Sep - Dic)</p>
-                    <p class="text-[11px] text-blue-700 font-medium">312 salidas (Septiembre, Octubre, Noviembre, Diciembre 2026)</p>
+                    <p class="text-xs font-black text-blue-900">Cuadrante Oficial 2026</p>
+                    <p class="text-[11px] text-blue-700 font-medium">192 salidas · 1 oct – 31 dic de 2026</p>
                 </div>
                 <button onclick="loadDefault2026Csv()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer">
                     <span>⚡ Cargar 2026</span>
@@ -766,7 +775,9 @@
                     </div>
                 </div>
                 <p id="csv-preview-range" class="text-[11px] text-slate-600 font-bold mb-1"></p>
+                <p id="csv-preview-years" class="text-[11px] text-slate-600 font-bold mb-1"></p>
                 <div id="csv-preview-centers" class="flex flex-wrap gap-1.5 mt-2"></div>
+                <div id="csv-preview-warnings" class="hidden mt-3 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed"></div>
             </div>
 
             <!-- Checkbox Sobrescribir -->
@@ -908,7 +919,7 @@
 
             <!-- Pie del Modal -->
             <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between shrink-0">
-                <span class="text-[10px] font-bold text-slate-400">Versión 6.0 · 2026</span>
+                <span class="text-[10px] font-bold text-slate-400">Versión 6.8</span>
                 <button onclick="hideEl('help-modal')" class="px-5 py-2 rounded-xl text-xs font-black text-white bg-slate-900 hover:bg-black transition-colors shadow-sm cursor-pointer">Entendido</button>
             </div>
         </div>
@@ -1034,13 +1045,13 @@
     </div>
 
     <!-- Carga de Scripts -->
-    <script src="config.js?v=6.7"></script>
-    <script src="utils.js?v=6.7"></script>
-    <script src="state.js?v=6.7"></script>
-    <script src="firebase-service.js?v=6.7"></script>
-    <script src="export.js?v=6.7"></script>
-    <script src="ui.js?v=6.7"></script>
-    <script src="app.js?v=6.7"></script>
+    <script src="config.js?v=6.8"></script>
+    <script src="utils.js?v=6.8"></script>
+    <script src="state.js?v=6.8"></script>
+    <script src="firebase-service.js?v=6.8"></script>
+    <script src="export.js?v=6.8"></script>
+    <script src="ui.js?v=6.8"></script>
+    <script src="app.js?v=6.8"></script>
 
     <!-- Registro de Service Worker (PWA y modo offline) -->
     <script>
