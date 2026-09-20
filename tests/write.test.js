@@ -35,7 +35,16 @@ let commitsHechos = [];    // lo que se ha intentado escribir
 let commitDevuelve = { ok: true };
 let sesion = 'moondive@visor.local';
 
+// Días y solicitudes adicionales para las operaciones de dos documentos.
+let dbExtra = {};   // { 'bdf_days/2026-07-15': {...}, 'bdf_requests/r1': {...} }
+
 admin.readDoc = async (coleccion, docId) => {
+    const clave = `${coleccion}/${docId}`;
+    if (Object.prototype.hasOwnProperty.call(dbExtra, clave)) {
+        const valor = dbExtra[clave];
+        if (!valor) return { exists: false, data: {}, updateTime: null };
+        return { exists: true, data: JSON.parse(JSON.stringify(valor)), updateTime: '2026-09-20T10:00:00.000000Z' };
+    }
     if (coleccion !== 'bdf_days') return { exists: false, data: {}, updateTime: null };
     if (!dbDia) return { exists: false, data: {}, updateTime: null };
     return { exists: true, data: JSON.parse(JSON.stringify(dbDia)), updateTime: '2026-09-20T10:00:00.000000Z' };
@@ -52,9 +61,37 @@ global.fetch = async () => ({
 
 function prepara(salidas, quien = 'moondive@visor.local') {
     dbDia = salidas === null ? null : { date: '2026-07-14', totalQuota: 30, salidas: salidas };
+    dbExtra = {};
     commitsHechos = [];
     commitDevuelve = { ok: true };
     sesion = quien;
+}
+
+/** Un día concreto de la base de datos de mentira. */
+function pon(fecha, salidas) {
+    dbExtra[`bdf_days/${fecha}`] = { date: fecha, salidas: salidas };
+}
+
+/** Una solicitud pendiente. */
+function ponSolicitud(id, datos) {
+    dbExtra[`bdf_requests/${id}`] = { status: 'pending', ...datos };
+}
+
+/** Las salidas escritas para una fecha concreta. */
+function salidasDe(fecha) {
+    const ultimo = commitsHechos[commitsHechos.length - 1] || [];
+    const doc = ultimo.find(w => w.update && w.update.name.endsWith(`bdf_days/${fecha}`));
+    if (!doc) return null;
+    return (doc.update.fields.salidas.arrayValue.values || []).map(v => ({
+        centro: v.mapValue.fields.centerCode.stringValue,
+        plazas: Number(v.mapValue.fields.plazas.integerValue)
+    }));
+}
+
+/** ¿Se ha borrado la solicitud en la misma operación? */
+function solicitudBorrada(id) {
+    const ultimo = commitsHechos[commitsHechos.length - 1] || [];
+    return ultimo.some(w => w.delete && w.delete.endsWith(`bdf_requests/${id}`));
 }
 
 async function llama(body, opciones = {}) {
@@ -216,6 +253,174 @@ await llama({ op: 'addSalida', dateStr: '2026-07-14', pax: 6, note: 'x'.repeat(5
 const notaLarga = commitsHechos[0].find(w => w.update.name.includes('bdf_days'))
     .update.fields.salidas.arrayValue.values[0].mapValue.fields.note.stringValue;
 check('una nota kilométrica se recorta', notaLarga.length, 200);
+
+
+// -------------------------------------------------------------------------
+section('Mover plazas propias de un día a otro');
+
+prepara([]);
+pon('2026-07-14', [{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }]);
+pon('2026-07-15', [{ id: 's2', centerCode: 'M', plazas: 6, pax: 6 }]);
+r = await llama({ op: 'moveSalida', sourceDate: '2026-07-14', targetDate: '2026-07-15', salidaId: 's1', pax: 4 });
+check('Moondive mueve 4 de sus 10 plazas', r.estado, 200);
+check('el día de origen se queda con 6', salidasDe('2026-07-14'), [{ centro: 'MD', plazas: 6 }]);
+check('y el de destino recibe las 4', salidasDe('2026-07-15'), [{ centro: 'M', plazas: 6 }, { centro: 'MD', plazas: 4 }]);
+
+prepara([]);
+pon('2026-07-14', [{ id: 's1', centerCode: 'M', plazas: 10, pax: 10 }]);
+pon('2026-07-15', []);
+r = await llama({ op: 'moveSalida', sourceDate: '2026-07-14', targetDate: '2026-07-15', salidaId: 's1', pax: 4 });
+check('nadie mueve las plazas de otra escuela', r.estado, 409);
+check('sin escribir nada', commitsHechos.length, 0);
+
+prepara([]);
+pon('2026-07-14', [{ id: 's1', centerCode: 'MD', plazas: 3, pax: 3 }]);
+pon('2026-07-15', []);
+r = await llama({ op: 'moveSalida', sourceDate: '2026-07-14', targetDate: '2026-07-15', salidaId: 's1', pax: 8 });
+check('no se puede mover más de lo que se tiene', r.estado, 409);
+
+prepara([]);
+pon('2026-07-14', [{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }]);
+pon('2026-01-15', [{ id: 's2', centerCode: 'M', plazas: 11, pax: 11 }]);
+r = await llama({ op: 'moveSalida', sourceDate: '2026-07-14', targetDate: '2026-01-15', salidaId: 's1', pax: 10 });
+check('ni aunque quepan en origen, si no caben en destino', r.estado, 409);
+
+prepara([]);
+pon('2026-07-14', [{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }]);
+r = await llama({ op: 'moveSalida', sourceDate: '2026-07-14', targetDate: '2026-07-14', salidaId: 's1', pax: 4 });
+check('mover a la misma fecha no tiene sentido', r.estado, 400);
+
+// -------------------------------------------------------------------------
+section('Ceder plazas a otra escuela');
+
+prepara([{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }, { id: 's2', centerCode: 'M', plazas: 8, pax: 8 }]);
+r = await llama({ op: 'spotTransfer', dateStr: '2026-07-14', toCenter: 'M', spots: 4 });
+check('Moondive cede 4 plazas a Mangamar', r.estado, 200);
+check('el reparto cambia pero el total no', salidasEscritas(), [{ centro: 'MD', plazas: 6 }, { centro: 'M', plazas: 12 }]);
+
+prepara([{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }, { id: 's2', centerCode: 'M', plazas: 8, pax: 8 }]);
+r = await llama({ op: 'spotTransfer', dateStr: '2026-07-14', fromCenter: 'M', toCenter: 'MD', spots: 8 });
+check('nadie puede ceder EN NOMBRE de otra escuela', r.estado, 403);
+ok('que es como robarle las plazas', /tu propio centro/i.test(r.cuerpo.error));
+check('nada escrito', commitsHechos.length, 0);
+
+prepara([{ id: 's1', centerCode: 'MD', plazas: 3, pax: 3 }]);
+r = await llama({ op: 'spotTransfer', dateStr: '2026-07-14', toCenter: 'M', spots: 9 });
+check('no se cede lo que no se tiene', r.estado, 409);
+
+prepara([{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }]);
+r = await llama({ op: 'spotTransfer', dateStr: '2026-07-14', toCenter: 'MD', spots: 4 });
+check('ni se cede uno a sí mismo', r.estado, 400);
+
+prepara([{ id: 's1', centerCode: 'MD', plazas: 10, pax: 10 }]);
+r = await llama({ op: 'spotTransfer', dateStr: '2026-07-14', toCenter: 'ZZ', spots: 4 });
+check('ni a un centro que no existe', r.estado, 400);
+
+// -------------------------------------------------------------------------
+section('Proponer: siempre en nombre propio');
+
+prepara([]);
+r = await llama({ op: 'createRequest', request: {
+    type: 'request', initiatorCenter: 'M', targetCenter: 'MD', date: '2026-07-14', requestedPax: 5
+} });
+check('no se puede proponer haciéndose pasar por otro', r.estado, 403);
+check('y no queda registrada', commitsHechos.length, 0);
+
+prepara([]);
+r = await llama({ op: 'createRequest', request: {
+    type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 5
+} });
+check('en nombre propio sí', r.estado, 200);
+const propuesta = commitsHechos[0].find(w => w.update.name.includes('bdf_requests'));
+check('nace pendiente', propuesta.update.fields.status.stringValue, 'pending');
+check('con el iniciador correcto', propuesta.update.fields.initiatorCenter.stringValue, 'MD');
+
+prepara([]);
+r = await llama({ op: 'createRequest', request: {
+    type: 'request', initiatorCenter: 'MD', targetCenter: 'MD', date: '2026-07-14', requestedPax: 5
+} });
+check('no se negocia con uno mismo', r.estado, 400);
+
+prepara([]);
+r = await llama({ op: 'createRequest', request: {
+    type: 'swap', initiatorCenter: 'MD', targetCenter: 'M',
+    dateA: '2026-07-14', dateB: 'mañana', centerA: 'MD', centerB: 'M',
+    paxA: 5, retainedPaxA: 0, paxB: 5, retainedPaxB: 0
+} });
+check('una fecha inventada tumba la propuesta', r.estado, 400);
+
+// -------------------------------------------------------------------------
+section('Aceptar: sólo el destinatario, y sin inventar plazas');
+
+// Quien propuso no puede aceptar su propia propuesta.
+prepara([{ id: 's1', centerCode: 'M', plazas: 10, pax: 10 }, { id: 's2', centerCode: 'MD', plazas: 5, pax: 5 }]);
+ponSolicitud('r1', { type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 4, targetSalidaId: 's1' });
+r = await llama({ op: 'acceptRequest', requestId: 'r1' });
+check('quien pide no puede aceptarse a sí mismo las plazas', r.estado, 403);
+check('ni escribir nada', commitsHechos.length, 0);
+
+prepara([{ id: 's1', centerCode: 'M', plazas: 10, pax: 10 }, { id: 's2', centerCode: 'MD', plazas: 5, pax: 5 }], 'mangamar@visor.local');
+ponSolicitud('r1', { type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 4, targetSalidaId: 's1' });
+r = await llama({ op: 'acceptRequest', requestId: 'r1' });
+check('Mangamar, que es quien cede, sí puede aceptar', r.estado, 200);
+check('cede 4 de sus 10', salidasDe('2026-07-14'), [{ centro: 'M', plazas: 6 }, { centro: 'MD', plazas: 9 }]);
+ok('y la solicitud se borra en la misma operación', solicitudBorrada('r1'));
+
+prepara([{ id: 's1', centerCode: 'M', plazas: 10, pax: 10 }], 'divers@visor.local');
+ponSolicitud('r1', { type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 4, targetSalidaId: 's1' });
+r = await llama({ op: 'acceptRequest', requestId: 'r1' });
+check('una escuela ajena no puede aceptar por otra', r.estado, 403);
+
+prepara([{ id: 's1', centerCode: 'M', plazas: 10, pax: 10 }], 'mangamar@visor.local');
+ponSolicitud('r1', { type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 4, status: 'accepted' });
+r = await llama({ op: 'acceptRequest', requestId: 'r1' });
+check('una solicitud ya resuelta no se acepta dos veces', r.estado, 409);
+
+// Intercambio entre dos días: el total de los dos días no puede cambiar.
+prepara([], 'mangamar@visor.local');
+pon('2026-07-14', [{ id: 'a', centerCode: 'MD', plazas: 12, pax: 12 }, { id: 'x', centerCode: 'D', plazas: 10, pax: 10 }]);
+pon('2026-07-15', [{ id: 'b', centerCode: 'M', plazas: 8, pax: 8 }, { id: 'y', centerCode: 'P', plazas: 5, pax: 5 }]);
+ponSolicitud('r2', {
+    type: 'swap', initiatorCenter: 'MD', targetCenter: 'M',
+    dateA: '2026-07-14', dateB: '2026-07-15', centerA: 'MD', centerB: 'M',
+    salidaIdA: 'a', salidaIdB: 'b',
+    paxA: 8, retainedPaxA: 4, paxB: 8, retainedPaxB: 0
+});
+r = await llama({ op: 'acceptRequest', requestId: 'r2' });
+check('el intercambio se aplica', r.estado, 200);
+const diaA = salidasDe('2026-07-14');
+const diaB = salidasDe('2026-07-15');
+check('día A: Moondive retiene 4 y llega Mangamar con 8', diaA, [{ centro: 'MD', plazas: 4 }, { centro: 'D', plazas: 10 }, { centro: 'M', plazas: 8 }]);
+check('día B: Mangamar se va del todo y llega Moondive con 8', diaB, [{ centro: 'P', plazas: 5 }, { centro: 'MD', plazas: 8 }]);
+const totalAntes = 12 + 10 + 8 + 5;
+const totalDespues = diaA.reduce((t, x) => t + x.plazas, 0) + diaB.reduce((t, x) => t + x.plazas, 0);
+check('no se ha inventado ni perdido una sola plaza', totalDespues, totalAntes);
+ok('y la propuesta desaparece', solicitudBorrada('r2'));
+
+// -------------------------------------------------------------------------
+section('Retirar y rechazar');
+
+prepara([], 'moondive@visor.local');
+ponSolicitud('r3', { type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 4 });
+r = await llama({ op: 'cancelRequest', requestId: 'r3' });
+check('quien propone puede retirar', r.estado, 200);
+ok('y se borra', solicitudBorrada('r3'));
+
+prepara([], 'mangamar@visor.local');
+ponSolicitud('r3', { type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 4 });
+r = await llama({ op: 'cancelRequest', requestId: 'r3' });
+check('el destinatario NO puede retirarla por él', r.estado, 403);
+
+prepara([], 'mangamar@visor.local');
+ponSolicitud('r3', { type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 4 });
+r = await llama({ op: 'rejectRequest', requestId: 'r3' });
+check('pero sí rechazarla', r.estado, 200);
+
+prepara([], 'divers@visor.local');
+ponSolicitud('r3', { type: 'request', initiatorCenter: 'MD', targetCenter: 'M', date: '2026-07-14', requestedPax: 4 });
+r = await llama({ op: 'rejectRequest', requestId: 'r3' });
+check('una tercera escuela no pinta nada', r.estado, 403);
+
 
 process.exit(report('ESCRITURAS EN EL SERVIDOR'));
 
