@@ -267,7 +267,7 @@ async function confirmWhatsAppAction() {
         await cb();
     } catch (e) {
         console.error("Error al ejecutar acción:", e);
-        showNotification('Error', e.message, true);
+        showNotification('Error', friendlyError(e, 'añadir las plazas'), true);
     }
 }
 
@@ -388,7 +388,7 @@ function confirmNewSalida() {
                 showToast('Salida añadida', `Añadidas ${pax} plazas para ${centerInfo.name}.`);
             })
             .catch(err => {
-                showNotification('Error', err.message, true);
+                showNotification('Error', friendlyError(err), true);
                 renderAll();
             });
         return;
@@ -403,7 +403,7 @@ function confirmNewSalida() {
             showToast('Salida añadida', `Añadidas ${pax} plazas para ${centerInfo.name}.`);
         } catch (err) {
             console.error("Error añadiendo salida:", err);
-            showNotification('Error', err.message, true);
+            showNotification('Error', friendlyError(err), true);
             renderAll();
         }
     });
@@ -746,7 +746,7 @@ function confirmEditSalida() {
                 showToast('Salida Modificada', 'Los cambios se han guardado.');
             })
             .catch(err => {
-                showNotification('Error', err.message, true);
+                showNotification('Error', friendlyError(err), true);
                 pendingEditSalida = null;
                 renderAll();
             });
@@ -764,7 +764,7 @@ function confirmEditSalida() {
             showToast('Salida Modificada', 'Los cambios se han guardado.');
         } catch (err) {
             console.error("Error modificando salida:", err);
-            showNotification('Error', err.message, true);
+            showNotification('Error', friendlyError(err), true);
             pendingEditSalida = null;
             renderAll();
         }
@@ -804,7 +804,7 @@ function confirmDeleteSalida() {
                 showToast('Salida Eliminada', 'Se han liberado las plazas.');
             })
             .catch(err => {
-                showNotification('Error', err.message, true);
+                showNotification('Error', friendlyError(err), true);
                 pendingEditSalida = null;
                 renderAll();
             });
@@ -821,7 +821,7 @@ function confirmDeleteSalida() {
             showToast('Salida Eliminada', 'Se han liberado las plazas.');
         } catch (err) {
             console.error("Error eliminando salida:", err);
-            showNotification('Error', err.message, true);
+            showNotification('Error', friendlyError(err), true);
             pendingEditSalida = null;
             renderAll();
         }
@@ -910,7 +910,7 @@ function confirmCesionDirecta() {
         })
         .catch(err => {
             console.error("Error cediendo plazas:", err);
-            showNotification('Error', err.message, true);
+            showNotification('Error', friendlyError(err), true);
             pendingCesionDirecta = null;
             renderAll();
         });
@@ -1238,7 +1238,7 @@ function confirmDonationRequest() {
             // misma operación que crea la solicitud.
         } catch (err) {
             console.error("Error enviando petición:", err);
-            showNotification('Error', err.message, true);
+            showNotification('Error', friendlyError(err), true);
         }
         pendingDonationRequest = null;
     });
@@ -1586,7 +1586,7 @@ function executeMoveWithAdminCheck(sourceDate, targetDate, salidaId, centerCode,
                 showToast('Salida Movida', `Movidas ${pax} plazas al ${d2}.`);
             })
             .catch(err => {
-                showNotification('Error', err.message, true);
+                showNotification('Error', friendlyError(err), true);
                 renderAll();
             });
         return;
@@ -1601,7 +1601,7 @@ function executeMoveWithAdminCheck(sourceDate, targetDate, salidaId, centerCode,
             showToast('Salida Movida', `Movidas ${pax} plazas al ${d2}.`);
         } catch (err) {
             console.error("Error moviendo salida:", err);
-            showNotification('Error', err.message, true);
+            showNotification('Error', friendlyError(err), true);
             renderAll();
         }
     });
@@ -1625,7 +1625,7 @@ function executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, 
                 showToast('Intercambio Completado', `Intercambio realizado entre ${cAInfo.name} (${dA}) y ${cBInfo.name} (${dB}).`);
             })
             .catch(err => {
-                showNotification('Error', err.message, true);
+                showNotification('Error', friendlyError(err), true);
                 renderAll();
             });
         return;
@@ -1662,7 +1662,7 @@ function executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, 
             // misma operación que crea la solicitud.
         } catch (err) {
             console.error("Error enviando propuesta de intercambio:", err);
-            showNotification('Error', err.message, true);
+            showNotification('Error', friendlyError(err), true);
             renderAll();
         }
     });
@@ -1692,7 +1692,7 @@ async function executeChangePassword() {
             hideEl('change-password-modal');
             showToast('Contraseña Actualizada', 'Tu nueva contraseña ha sido guardada.');
         } catch (e) {
-            showToast('Error', e.message, true);
+            showToast('Error', friendlyError(e), true);
         }
     }
 }
@@ -1741,7 +1741,7 @@ async function handleImport(e) {
         }
     } catch (err) {
         console.error("Error al importar CSV:", err);
-        showToast('Error al Importar', err.message, true);
+        showToast('Error al Importar', friendlyError(err, 'importar el cuadrante'), true);
     } finally {
         if (btn && originalBtnHtml) btn.innerHTML = originalBtnHtml;
         e.target.value = '';
@@ -1851,7 +1851,7 @@ async function loadDefault2026Csv() {
         processCsvText(text);
         showToast('Cuadrante 2026', 'Archivo predeterminado cargado en el visor previo.');
     } catch (e) {
-        showToast('Error', e.message, true);
+        showToast('Error', friendlyError(e), true);
     }
 }
 
@@ -1929,7 +1929,7 @@ function processCsvText(text) {
         const btn = getEl('btn-do-import-csv');
         if (btn) btn.disabled = true;
         pendingCsvData = null;
-        showToast('Error en CSV', e.message, true);
+        showToast('Error en CSV', friendlyError(e, 'leer el archivo CSV'), true);
     }
 }
 
@@ -1956,7 +1956,7 @@ async function confirmImportCsv() {
             }
         }
     } catch (e) {
-        showToast('Error al importar', e.message, true);
+        showToast('Error al importar', friendlyError(e, 'importar las salidas'), true);
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;

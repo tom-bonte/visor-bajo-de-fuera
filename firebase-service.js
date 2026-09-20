@@ -396,7 +396,7 @@ async function acceptBdfRequest(requestId, btnEl = null) {
         }
     } catch (err) {
         reportFailure(err, "Error al aceptar solicitud");
-        showNotification('Error', err.message, true);
+        showNotification('Error', friendlyError(err, 'aplicar la solicitud'), true);
         renderAll();
     } finally {
         inFlightRequestIds.delete(requestId);
@@ -463,7 +463,7 @@ async function cancelBdfRequest(requestId) {
         showToast('Solicitud Retirada', 'La petición ha sido cancelada y las plazas quedan desbloqueadas.');
     } catch (err) {
         reportFailure(err, "Error al cancelar solicitud");
-        showNotification('Error', 'No se pudo cancelar la solicitud: ' + err.message, true);
+        showNotification('Error', friendlyError(err, 'retirar la solicitud'), true);
     }
 }
 
@@ -484,7 +484,7 @@ async function rejectBdfRequest(requestId) {
         showToast('Solicitud Denegada', 'La petición ha sido rechazada y las plazas quedan desbloqueadas.');
     } catch (err) {
         reportFailure(err, "Error al rechazar solicitud");
-        showNotification('Error', 'No se pudo rechazar la solicitud: ' + err.message, true);
+        showNotification('Error', friendlyError(err, 'rechazar la solicitud'), true);
     }
 }
 
@@ -540,6 +540,28 @@ async function callBdfWrite(op, payload = {}) {
         throw err;
     }
     return data;
+}
+
+
+/**
+ * El texto que ve una escuela cuando algo falla.
+ *
+ * Los errores que vienen de nuestro servidor ya están escritos en castellano y
+ * explican el motivo ("otro centro ha cambiado ese día a la vez"), así que se
+ * muestran tal cual. Los que vienen de Firebase (las herramientas del admin,
+ * que siguen escribiendo directamente, y los fallos de conexión) llegan en
+ * inglés y en lenguaje de programador: esos se traducen. Antes se enseñaba
+ * "FirebaseError: Missing or insufficient permissions" y nadie sabía si su
+ * reserva se había guardado o no.
+ *
+ * @param {Error} err
+ * @param {string} accion - qué se estaba intentando: 'guardar las plazas'…
+ */
+function friendlyError(err, accion = 'guardar los cambios') {
+    if (!err) return `No se ha podido ${accion}.`;
+    // Mensaje ya redactado por nuestra función del servidor.
+    if (err.serverStatus) return err.message;
+    return describeFirestoreError(err, accion);
 }
 
 /** Marca de tiempo del servidor de Firestore (el navegador no pone su reloj). */

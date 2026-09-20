@@ -19,6 +19,7 @@
  * Variables de entorno: FIREBASE_SERVICE_ACCOUNT (ver lib/firestore-admin.js).
  */
 const admin = require('./lib/firestore-admin');
+const { verifyIdToken } = require('./lib/verify-token');
 const { normCenter } = require('../../utils.js');
 const { getDayQuota, MAX_BOAT_CAP, EMAIL_MAP, USER_CENTER_KEYS, CENTERS, BDF_COLLECTIONS, firebaseConfig } = require('../../config.js');
 const {
@@ -40,17 +41,26 @@ function respond(statusCode, payload) {
     return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };
 }
 
-/** Quién llama: se comprueba contra Google, no se cree lo que diga el cliente. */
+/**
+ * Quién llama. Se comprueba la firma del token aquí mismo, con las claves
+ * públicas de Google: es lo mismo que comprobaría Google, sin la ida y vuelta.
+ *
+ * Si no se pudieran descargar esas claves (Google caído, red rara), se pregunta
+ * a Google como antes. Ese respaldo es sólo para fallos de RED: una firma que no
+ * cuadra se rechaza siempre, nunca se reintenta por otra vía.
+ */
 async function identify(idToken) {
-    const res = await fetch(`${VERIFY_URL}?key=${encodeURIComponent(FIREBASE_API_KEY)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const email = ((data.users && data.users[0] && data.users[0].email) || '').toLowerCase();
-    if (!email) return null;
+    let email = '';
+
+    try {
+        const verificado = await verifyIdToken(idToken, firebaseConfig.projectId);
+        if (!verificado) return null;          // token inválido: se acabó
+        email = verificado.email;
+    } catch (e) {
+        console.warn('[bdf-write] No se han podido comprobar las claves de Google, se pregunta directamente:', e.message);
+        email = await identifyViaGoogle(idToken);
+        if (!email) return null;
+    }
 
     const userKey = Object.keys(EMAIL_MAP).find(k => EMAIL_MAP[k] === email);
     if (!userKey) return null;
@@ -60,6 +70,18 @@ async function identify(idToken) {
         isAdmin: email === ADMIN_EMAIL,
         center: USER_CENTER_KEYS[userKey] || null   // el admin no tiene centro propio
     };
+}
+
+/** Respaldo: preguntarle a Google por el token, como se hacía antes. */
+async function identifyViaGoogle(idToken) {
+    const res = await fetch(`${VERIFY_URL}?key=${encodeURIComponent(FIREBASE_API_KEY)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    return ((data.users && data.users[0] && data.users[0].email) || '').toLowerCase();
 }
 
 /** El centro sobre el que se actúa, comprobando que se tiene derecho a hacerlo. */
@@ -610,6 +632,10 @@ exports.handler = async (event) => {
     const operacion = OPERACIONES[body.op];
     if (!operacion) return respond(400, { error: 'Operación desconocida.' });
 
+    // No depende de quién seas, así que se pide ya: cuando haga falta escribir,
+    // normalmente estará listo.
+    const tokenServidor = admin.accessToken().catch(() => null);
+
     let quien;
     try {
         quien = await identify(idToken);
@@ -620,6 +646,7 @@ exports.handler = async (event) => {
     if (!quien) return respond(401, { error: 'Sesión no válida o caducada.' });
 
     try {
+        await tokenServidor;
         return await operacion(quien, body);
     } catch (e) {
         console.error(`[bdf-write] ${body.op} ha fallado:`, e);

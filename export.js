@@ -172,7 +172,7 @@ async function downloadJsonBackup() {
         showToast('Backup JSON Descargado', `Se han exportado ${totalDays} días con éxito.`);
     } catch (err) {
         console.error("Error al exportar JSON:", err);
-        showToast('Error de Exportación', 'No se pudo generar el archivo JSON: ' + err.message, true);
+        showToast('Error de Exportación', friendlyError(err, 'generar la copia en JSON'), true);
     }
 }
 
@@ -502,7 +502,7 @@ async function executePrintPDF() {
             showToast('PDF Descargado', 'Documento PDF generado y descargado correctamente.');
         } catch (err) {
             console.error("Error al generar PDF vectorial:", err);
-            showToast('Error', 'Hubo un fallo al generar el PDF: ' + err.message, true);
+            showToast('Error', friendlyError(err, 'generar el PDF'), true);
         }
     }, 120);
 }

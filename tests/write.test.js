@@ -25,15 +25,22 @@ const RUTA_ADMIN = path.join(__dirname, '..', 'netlify', 'functions', 'lib', 'fi
 const RUTA_FUNCION = path.join(__dirname, '..', 'netlify', 'functions', 'bdf-write.js');
 
 const admin = require(RUTA_ADMIN);
+
+// Estos tests van de QUÉ hace cada operación; que el token esté bien firmado es
+// asunto de token.test.js. Se sustituye la comprobación ANTES de cargar la
+// función, porque la toma una sola vez al cargarse.
+const verificador = require(path.join(__dirname, '..', 'netlify', 'functions', 'lib', 'verify-token.js'));
+verificador.verifyIdToken = async () => (sesion ? { email: sesion, uid: 'uid-pruebas' } : null);
+
 const funcion = require(RUTA_FUNCION);
 
 // -------------------------------------------------------------------------
 // Banco de pruebas: una base de datos de mentira y un Google de mentira.
 // -------------------------------------------------------------------------
+let sesion = 'moondive@visor.local';
 let dbDia = null;          // lo que devuelve la lectura del día
 let commitsHechos = [];    // lo que se ha intentado escribir
 let commitDevuelve = { ok: true };
-let sesion = 'moondive@visor.local';
 
 // Días y solicitudes adicionales para las operaciones de dos documentos.
 let dbExtra = {};   // { 'bdf_days/2026-07-15': {...}, 'bdf_requests/r1': {...} }
@@ -54,10 +61,7 @@ admin.commit = async (writes) => {
     return commitDevuelve;
 };
 
-global.fetch = async () => ({
-    ok: sesion !== null,
-    json: async () => ({ users: [{ email: sesion }] })
-});
+global.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) });
 
 function prepara(salidas, quien = 'moondive@visor.local') {
     dbDia = salidas === null ? null : { date: '2026-07-14', totalQuota: 30, salidas: salidas };

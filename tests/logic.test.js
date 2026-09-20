@@ -218,4 +218,32 @@ ok('el aviso de modificación nombra al centro de la salida',
 ok('y ningún aviso se construye con un centro que puede ser nulo',
     !/safeCenter\(newCenterCode\)/.test(appSrc));
 
+// -------------------------------------------------------------------------
+section('Ningún error en inglés llega al usuario');
+
+const { friendlyError } = app;
+
+// Errores de Firebase (las herramientas del admin y los fallos de conexión).
+const permisos = Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+ok('permiso denegado se traduce', /permisos/i.test(friendlyError(permisos, 'guardar las plazas')));
+ok('y no enseña el texto de Firebase', !/insufficient/i.test(friendlyError(permisos)));
+
+const choque = Object.assign(new Error('ABORTED'), { code: 'aborted' });
+ok('un choque entre escuelas se explica', /al mismo tiempo/i.test(friendlyError(choque)));
+
+const caido = Object.assign(new Error('Failed to get document because the client is offline.'), { code: 'unavailable' });
+ok('sin conexión se explica', /Sin conexión/i.test(friendlyError(caido)));
+ok('y aclara que no se ha cambiado nada', /No se ha cambiado nada/i.test(friendlyError(caido)));
+
+// Errores de nuestro servidor: ya vienen redactados, se dejan intactos.
+const delServidor = Object.assign(new Error('Sólo puedes gestionar las plazas de tu propio centro.'), { serverStatus: 403 });
+check('los mensajes del servidor se respetan', friendlyError(delServidor), 'Sólo puedes gestionar las plazas de tu propio centro.');
+
+check('sin error, un texto con sentido', friendlyError(null, 'mover las plazas'), 'No se ha podido mover las plazas.');
+
+// Y que de verdad esté conectado en la app.
+ok('la app enseña los errores a través del traductor', /friendlyError\(/.test(appSrc));
+check('ya no queda ningún err.message crudo en pantalla',
+    /showNotification\('Error', err\.message/.test(appSrc), false);
+
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));
