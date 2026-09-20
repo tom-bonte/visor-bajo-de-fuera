@@ -2,6 +2,18 @@
   publish = "."
   command = ""
 
+[build.environment]
+  # La apiKey de Firebase es PÚBLICA por diseño: es un identificador de proyecto,
+  # va dentro de config.js y se sirve al navegador en cualquier app web de Firebase.
+  # Lo que protege los datos son las reglas de Firestore, no ocultar esa cadena.
+  #
+  # Si alguien la registra como variable de entorno en Netlify, el escáner de
+  # secretos encuentra ese mismo valor dentro de config.js al desplegar y tumba
+  # la compilación ("Exposed secrets detected"). Ya ocurrió el 20/09/2026.
+  # Excluirla del escaneo deja el despliegue a salvo de ese error, sin bajar la
+  # guardia con MAKE_WEBHOOK_URL, que sí es un secreto real y se sigue vigilando.
+  SECRETS_SCAN_OMIT_KEYS = "FIREBASE_API_KEY"
+
 # Proxy autenticado hacia el webhook de WhatsApp (netlify/functions/notify.js).
 # Requiere esta variable de entorno en Netlify → Site settings → Environment variables:
 #   MAKE_WEBHOOK_URL   URL del webhook de Make.com (SECRETA: marcar "Contains secret values")
