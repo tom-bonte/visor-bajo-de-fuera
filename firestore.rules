@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // HELPER FUNCTIONS
+    // IDENTIDAD
     // =========================================================================
     function isSignedIn() {
       return request.auth != null;
@@ -13,16 +13,79 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email == 'admin@visor.local';
     }
 
+    // 'mangamar@visor.local' -> 'mangamar'
+    function userKey() {
+      return isSignedIn() ? request.auth.token.email.split('@')[0] : '';
+    }
+
+    // 'mangamar@visor.local' -> 'M'.  Cadena vacía si no es un centro conocido.
+    function myCenter() {
+      return {
+        'moondive': 'MD', 'hormigas': 'H', 'mangamar': 'M', 'naranjito': 'N',
+        'planeta': 'P', 'divers': 'D', 'club': 'C', 'xlm': 'X'
+      }.get(userKey(), '');
+    }
+
     // =========================================================================
-    // 1. VISOR BAJO DE FUERA (sin cambios en esta ronda)
+    // VALIDACIÓN DE UN DÍA DE BAJO DE FUERA
+    // =========================================================================
+    // No se puede expresar "sólo puedes tocar tus plazas": un intercambio o una
+    // cesión modifican legítimamente los registros de DOS escuelas en la misma
+    // escritura. Lo que sí se garantiza aquí es que ningún cliente (ni con la
+    // consola abierta) pueda dejar el día en un estado imposible.
+
+    function validCenterCode(c) {
+      return c is string && c in ['MD', 'H', 'M', 'N', 'P', 'D', 'C', 'X'];
+    }
+
+    function validSalida(s) {
+      return s.plazas is int
+          && s.plazas > 0
+          && s.plazas <= 30
+          && validCenterCode(s.centerCode)
+          && (!('note' in s) || (s.note is string && s.note.size() <= 200));
+    }
+
+    // Section 0: como máximo un registro por escuela y día, y hay 8 escuelas.
+    function salidaOkAt(list, i) {
+      return i >= list.size() || validSalida(list[i]);
+    }
+
+    function plazasAt(list, i) {
+      return i < list.size() ? list[i].plazas : 0;
+    }
+
+    // Tope duro de 30 (el cupo diario máximo posible). El cupo exacto de cada
+    // fecha (13 o 30 según temporada) lo sigue aplicando la app; esto es la red
+    // de seguridad para que nunca se pueda sobrepasar el máximo absoluto.
+    function totalPlazasOk(list) {
+      return (plazasAt(list, 0) + plazasAt(list, 1) + plazasAt(list, 2) + plazasAt(list, 3)
+            + plazasAt(list, 4) + plazasAt(list, 5) + plazasAt(list, 6) + plazasAt(list, 7)) <= 30;
+    }
+
+    function salidasValid(list) {
+      return list is list
+          && list.size() <= 8
+          && salidaOkAt(list, 0) && salidaOkAt(list, 1) && salidaOkAt(list, 2) && salidaOkAt(list, 3)
+          && salidaOkAt(list, 4) && salidaOkAt(list, 5) && salidaOkAt(list, 6) && salidaOkAt(list, 7)
+          && totalPlazasOk(list);
+    }
+
+    function dayWriteValid() {
+      return !('salidas' in request.resource.data)
+          || salidasValid(request.resource.data.salidas);
+    }
+
+    // =========================================================================
+    // 1. VISOR BAJO DE FUERA
     // =========================================================================
 
-    // Calendario diario de Bajo de Fuera
+    // Calendario diario
     match /bdf_days/{dayId} {
       // Cualquier usuario (incluido modo consulta/invitado) puede leer el calendario
       allow read: if true;
-      // Solo usuarios autenticados (centros de buceo o admin) pueden añadir o modificar plazas
-      allow create, update: if isSignedIn();
+      // Centros autenticados y admin pueden escribir, siempre que el día quede válido
+      allow create, update: if isSignedIn() && dayWriteValid();
       // Solo el Administrador puede borrar un día completo
       allow delete: if isAdmin();
     }
@@ -31,25 +94,37 @@ service cloud.firestore {
     match /bdf_history_logs/{logId} {
       // Lectura pública/centros para la pestaña de Historial
       allow read: if true;
-      // Solo usuarios autenticados pueden registrar eventos de auditoría
-      allow create: if isSignedIn();
-      // Nadie puede alterar ni borrar el historial (inmutable), excepto Admin
+      // Cada centro sólo puede firmar entradas con SU propia clave: así no se
+      // pueden falsificar acciones en nombre de otra escuela.
+      allow create: if isSignedIn()
+                    && (isAdmin() || request.resource.data.centerKey == userKey());
+      // Historial inmutable salvo para el Admin
       allow update, delete: if isAdmin();
     }
 
-    // Solicitudes activas de intercambio y peticiones de plazas
+    // Solicitudes de intercambio, peticiones y cesiones
     match /bdf_requests/{requestId} {
-      // Solo centros autenticados pueden ver, crear, responder o cancelar solicitudes
-      allow read, create, update, delete: if isSignedIn();
+      allow read: if isSignedIn();
+
+      // Sólo se puede proponer EN NOMBRE PROPIO. Antes, cualquier centro podía
+      // crear una solicitud haciéndose pasar por otro, disparando un mensaje de
+      // WhatsApp y bloqueando las plazas de terceros en su nombre.
+      allow create: if isSignedIn()
+                    && (isAdmin() || request.resource.data.initiatorCenter == myCenter());
+
+      // Aceptar, rechazar, cancelar o caducar: sólo las dos escuelas implicadas
+      // o el Administrador.
+      allow update, delete: if isSignedIn()
+                            && (isAdmin()
+                                || resource.data.initiatorCenter == myCenter()
+                                || resource.data.targetCenter == myCenter());
     }
 
     // =========================================================================
     // 2. VISOR RESERVA CABO DE PALOS
     // =========================================================================
-    // Lectura pública: la app tiene modo consulta sin login, y además la app
-    // Mangamar lee 'reservations_monthly' para poblar sus salidas.
-    // Escritura solo autenticada: el visor CdP nunca escribe sin sesión iniciada
-    // (no realiza ninguna escritura al cargar la página).
+    // Lectura pública: modo consulta sin login, y la app Mangamar lee
+    // 'reservations_monthly' para poblar sus salidas.
 
     match /reservations_monthly/{doc=**} {
       allow read: if true;
@@ -74,9 +149,8 @@ service cloud.firestore {
     // =========================================================================
     // 3. APP MANGAMAR (comportamiento IDÉNTICO al actual, sin cambios)
     // =========================================================================
-    // Se mantiene el acceso tal y como está hoy mientras se confirma su modelo
-    // de autenticación (personal = solo lectura, gerencia = escritura).
-    // PENDIENTE: restringir en una segunda fase.
+    // PENDIENTE: restringir cuando se confirme su modelo de autenticación
+    // (personal = solo lectura, gerencia = escritura).
     match /{col}/{doc=**} {
       allow read, write: if col.matches('^mangamar_.*');
     }

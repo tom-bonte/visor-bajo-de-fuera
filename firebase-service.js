@@ -258,19 +258,28 @@ function listenBdfRequests() {
                     return;
                 }
 
-                // Auto-expirar solicitudes de fechas pasadas
+                // Solicitudes de fechas ya pasadas: se ocultan SIEMPRE en local.
+                // Antes, cualquier navegador que abriese la app marcaba como 'expired'
+                // las solicitudes de cualquier escuela usando SU reloj: un dispositivo
+                // con la fecha o la zona horaria mal caducaba propuestas ajenas todavía
+                // válidas. Ahora sólo escribe quien es parte de la solicitud (o el admin),
+                // así un reloj equivocado sólo puede afectar a lo suyo.
                 const isExpired = data.type === 'swap'
                     ? ((data.dateA && data.dateA < todayStr) || (data.dateB && data.dateB < todayStr))
                     : (data.date && data.date < todayStr);
 
                 if (isExpired) {
-                    // Marcar como expirada en Firestore para limpiar la cola y liberar plazas
-                    db.collection(BDF_COLLECTIONS.REQUESTS).doc(doc.id).update({
-                        status: 'expired',
-                        expiredAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }).catch(() => {
-                        db.collection(BDF_COLLECTIONS.REQUESTS).doc(doc.id).delete().catch(console.error);
-                    });
+                    const myCode = USER_CENTER_KEYS[currentUserKey];
+                    const isMine = currentUserKey === 'admin' || (myCode && (
+                        normCenter(data.initiatorCenter) === normCenter(myCode) ||
+                        normCenter(data.targetCenter) === normCenter(myCode)
+                    ));
+                    if (isMine) {
+                        db.collection(BDF_COLLECTIONS.REQUESTS).doc(doc.id).update({
+                            status: 'expired',
+                            expiredAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }).catch(console.error);
+                    }
                     return;
                 }
 
