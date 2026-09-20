@@ -195,16 +195,16 @@ function renderToolbar() {
  */
 function formatPendingRequestTooltip(req, dateStr, centerCode) {
     if (!req) return '';
-    const initInfo = CENTERS[req.initiatorCenter] || { name: req.initiatorCenter || 'Centro' };
-    const targetInfo = CENTERS[req.targetCenter] || { name: req.targetCenter || 'Centro' };
+    const initInfo = safeCenter(req.initiatorCenter);
+    const targetInfo = safeCenter(req.targetCenter);
 
     let detailsHtml = '';
 
     if (req.type === 'swap') {
-        const cA = CENTERS[req.centerA] || { name: req.centerA || 'Centro A' };
-        const cB = CENTERS[req.centerB] || { name: req.centerB || 'Centro B' };
-        const paxA = req.paxA !== undefined ? req.paxA : (req.salidaA?.pax || '?');
-        const paxB = req.paxB !== undefined ? req.paxB : (req.salidaB?.pax || '?');
+        const cA = safeCenter(req.centerA);
+        const cB = safeCenter(req.centerB);
+        const paxA = escapeHtml(req.paxA !== undefined ? req.paxA : (req.salidaA?.pax || '?'));
+        const paxB = escapeHtml(req.paxB !== undefined ? req.paxB : (req.salidaB?.pax || '?'));
 
         const dObjA = parseDateT00(req.dateA);
         const dObjB = parseDateT00(req.dateB);
@@ -222,7 +222,7 @@ function formatPendingRequestTooltip(req, dateStr, centerCode) {
             </div>
         `;
     } else if (req.type === 'request') {
-        const spots = req.isAll ? 'todas las plazas' : `${req.requestedPax || '?'} pl.`;
+        const spots = req.isAll ? 'todas las plazas' : `${escapeHtml(req.requestedPax || '?')} pl.`;
         const dObj = parseDateT00(req.date);
         const dStr = `${dObj.getDate()} ${MONTHS_SHORT[dObj.getMonth()]}`;
 
@@ -233,7 +233,7 @@ function formatPendingRequestTooltip(req, dateStr, centerCode) {
             </div>
         `;
     } else if (req.type === 'donation') {
-        const spots = req.isFull ? 'el barco completo' : `${req.requestedPax || req.pax || '?'} pl.`;
+        const spots = req.isFull ? 'el barco completo' : `${escapeHtml(req.requestedPax || req.pax || '?')} pl.`;
         const dObj = parseDateT00(req.date);
         const dStr = `${dObj.getDate()} ${MONTHS_SHORT[dObj.getMonth()]}`;
 
@@ -425,7 +425,7 @@ function renderMonthlyCalendar() {
             <!-- Lista de Plazas por Centro (En móvil: tags compactos sin caja) -->
             <div class="flex-1 flex flex-wrap md:flex-col gap-1 pt-0.5 content-start">
                 ${displayBoxes.length > 0 ? displayBoxes.map(box => {
-                    const cInfo = CENTERS[box.centerCode] || { name: box.centerCode, color: 'bg-slate-700', text: 'text-white' };
+                    const cInfo = safeCenter(box.centerCode);
                     const isMy = !isGuestMode && normCenter(box.centerCode) === normCenter(myCenterCode);
                     const pendingReq = getPendingRequestForSalida(box.id, dateStr, box.centerCode);
                     const isLocked = !!pendingReq;
@@ -567,7 +567,7 @@ function renderHistoryView() {
                 // Resolver nombre de centro principal
                 const centerKey = d.center || d.fromCenter || log.centerKey;
                 const cCode = USER_CENTER_KEYS[centerKey] || centerKey;
-                const cInfo = CENTERS[cCode] || CENTERS[centerKey] || { name: centerKey || 'Centro', color: 'bg-slate-600', text: 'text-white' };
+                const cInfo = safeCenter(cCode);
                 const cName = cInfo.name;
 
                 let title = 'Operación';
@@ -579,44 +579,44 @@ function renderHistoryView() {
                 if (type === 'add_salida' || type === 'add') {
                     title = 'Nueva Salida';
                     icon = '➕';
-                    desc = `<b>${cName}</b> añadió una salida a Bajo de Fuera para el <b>${d.date}</b> (<b>${d.slots || d.pax || '—'} plazas</b>).`;
+                    desc = `<b>${cName}</b> añadió una salida a Bajo de Fuera para el <b>${escapeHtml(d.date)}</b> (<b>${escapeHtml(d.slots || d.pax || '—')} plazas</b>).`;
                     badgeClass = 'bg-emerald-100 text-emerald-800';
                 } else if (type === 'edit_salida' || type === 'edit') {
                     title = 'Modificar Salida';
                     icon = '✏️';
-                    desc = `<b>${cName}</b> modificó su salida en Bajo de Fuera para el <b>${d.date}</b> a <b>${d.slots || d.newPax || '—'} plazas</b>.`;
+                    desc = `<b>${cName}</b> modificó su salida en Bajo de Fuera para el <b>${escapeHtml(d.date)}</b> a <b>${escapeHtml(d.slots || d.newPax || '—')} plazas</b>.`;
                     badgeClass = 'bg-blue-100 text-blue-800';
                     if (d.note) desc += `<br><span class="text-slate-400 italic">"${escapeHtml(d.note)}"</span>`;
                 } else if (type === 'delete_salida' || type === 'delete') {
                     title = 'Eliminar Salida';
                     icon = '🗑️';
-                    desc = `<b>${cName}</b> eliminó su salida de Bajo de Fuera para el <b>${d.date}</b>.`;
+                    desc = `<b>${cName}</b> eliminó su salida de Bajo de Fuera para el <b>${escapeHtml(d.date)}</b>.`;
                     badgeClass = 'bg-rose-100 text-rose-800';
                 } else if (type === 'move_salida' || type === 'move') {
                     title = 'Mover Salida';
                     icon = '➡️';
-                    desc = `<b>${cName}</b> movió su salida de <b>${d.slots || '—'} plazas</b> del día <b>${d.from || d.oldDate}</b> al <b>${d.to || d.newDate}</b>.`;
+                    desc = `<b>${cName}</b> movió su salida de <b>${escapeHtml(d.slots || '—')} plazas</b> del día <b>${escapeHtml(d.from || d.oldDate)}</b> al <b>${escapeHtml(d.to || d.newDate)}</b>.`;
                     badgeClass = 'bg-indigo-100 text-indigo-800';
                 } else if (type === 'swap_salidas' || type === 'swap') {
                     title = 'Intercambio';
                     icon = '🔀';
                     const cACode = USER_CENTER_KEYS[d.centerA] || d.centerA;
                     const cBCode = USER_CENTER_KEYS[d.centerB] || d.centerB;
-                    const cAInfo = CENTERS[cACode] || { name: d.centerA, color: 'bg-slate-600', text: 'text-white' };
-                    const cBInfo = CENTERS[cBCode] || { name: d.centerB, color: 'bg-slate-600', text: 'text-white' };
+                    const cAInfo = safeCenter(cACode);
+                    const cBInfo = safeCenter(cBCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${cAInfo.color} ${cAInfo.text}">${cAInfo.name}</span><span class="text-slate-400 text-xs mx-1">↔️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${cBInfo.color} ${cBInfo.text}">${cBInfo.name}</span>`;
-                    desc = `<b>${cAInfo.name}</b> (${d.paxA || '—'} pl. el ${d.dateA}) permutó su fecha con <b>${cBInfo.name}</b> (${d.paxB || '—'} pl. el ${d.dateB}).`;
+                    desc = `<b>${cAInfo.name}</b> (${escapeHtml(d.paxA || '—')} pl. el ${escapeHtml(d.dateA)}) permutó su fecha con <b>${cBInfo.name}</b> (${escapeHtml(d.paxB || '—')} pl. el ${escapeHtml(d.dateB)}).`;
                     badgeClass = 'bg-amber-100 text-amber-800';
                 } else if (type === 'petition') {
                     title = 'Petición de Plazas';
                     icon = '🤲';
                     const fromCode = USER_CENTER_KEYS[d.fromCenter] || d.fromCenter || log.centerKey;
                     const toCode = USER_CENTER_KEYS[d.toCenter] || d.toCenter;
-                    const fromInfo = CENTERS[fromCode] || { name: fromCode, color: 'bg-slate-600', text: 'text-white' };
-                    const toInfo = CENTERS[toCode] || { name: toCode, color: 'bg-slate-600', text: 'text-white' };
+                    const fromInfo = safeCenter(fromCode);
+                    const toInfo = safeCenter(toCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${fromInfo.color} ${fromInfo.text}">${fromInfo.name}</span><span class="text-slate-400 text-xs mx-1">➡️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${toInfo.color} ${toInfo.text}">${toInfo.name}</span>`;
-                    const spotsText = d.isFull ? 'el barco completo' : `${d.slots} plazas`;
-                    desc = `<b>${fromInfo.name}</b> solicitó <b>${spotsText}</b> a <b>${toInfo.name}</b> para el <b>${d.date}</b>.`;
+                    const spotsText = d.isFull ? 'el barco completo' : `${escapeHtml(d.slots)} plazas`;
+                    desc = `<b>${fromInfo.name}</b> solicitó <b>${spotsText}</b> a <b>${toInfo.name}</b> para el <b>${escapeHtml(d.date)}</b>.`;
                     badgeClass = 'bg-blue-100 text-blue-800';
                     if (d.note) desc += `<br><span class="text-slate-400 italic">"${escapeHtml(d.note)}"</span>`;
                 } else if (type === 'transfer_proposal') {
@@ -624,11 +624,11 @@ function renderHistoryView() {
                     icon = '🎁';
                     const fromCode = USER_CENTER_KEYS[d.fromCenter] || d.fromCenter || log.centerKey;
                     const toCode = USER_CENTER_KEYS[d.toCenter] || d.toCenter;
-                    const fromInfo = CENTERS[fromCode] || { name: fromCode, color: 'bg-slate-600', text: 'text-white' };
-                    const toInfo = CENTERS[toCode] || { name: toCode, color: 'bg-slate-600', text: 'text-white' };
+                    const fromInfo = safeCenter(fromCode);
+                    const toInfo = safeCenter(toCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${fromInfo.color} ${fromInfo.text}">${fromInfo.name}</span><span class="text-slate-400 text-xs mx-1">➡️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${toInfo.color} ${toInfo.text}">${toInfo.name}</span>`;
-                    const spotsText = d.isFull ? 'el barco completo' : `${d.slots} plazas`;
-                    desc = `<b>${fromInfo.name}</b> ofreció ceder <b>${spotsText}</b> a <b>${toInfo.name}</b> para el <b>${d.date}</b>.`;
+                    const spotsText = d.isFull ? 'el barco completo' : `${escapeHtml(d.slots)} plazas`;
+                    desc = `<b>${fromInfo.name}</b> ofreció ceder <b>${spotsText}</b> a <b>${toInfo.name}</b> para el <b>${escapeHtml(d.date)}</b>.`;
                     badgeClass = 'bg-amber-100 text-amber-800';
                     if (d.note) desc += `<br><span class="text-slate-400 italic">"${escapeHtml(d.note)}"</span>`;
                 } else if (type === 'transfer_salida' || type === 'transfer' || type === 'donation') {
@@ -636,10 +636,10 @@ function renderHistoryView() {
                     icon = '🤝';
                     const fromCode = USER_CENTER_KEYS[d.from || d.fromCenter] || d.from || d.fromCenter || log.centerKey;
                     const toCode = USER_CENTER_KEYS[d.to || d.toCenter] || d.to || d.toCenter;
-                    const fromInfo = CENTERS[fromCode] || { name: fromCode, color: 'bg-slate-600', text: 'text-white' };
-                    const toInfo = CENTERS[toCode] || { name: toCode, color: 'bg-slate-600', text: 'text-white' };
+                    const fromInfo = safeCenter(fromCode);
+                    const toInfo = safeCenter(toCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${fromInfo.color} ${fromInfo.text}">${fromInfo.name}</span><span class="text-slate-400 text-xs mx-1">➡️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${toInfo.color} ${toInfo.text}">${toInfo.name}</span>`;
-                    desc = `<b>${fromInfo.name}</b> transfirió <b>${d.slots || d.pax} plazas</b> a <b>${toInfo.name}</b> para el <b>${d.date}</b>.`;
+                    desc = `<b>${fromInfo.name}</b> transfirió <b>${escapeHtml(d.slots || d.pax)} plazas</b> a <b>${toInfo.name}</b> para el <b>${escapeHtml(d.date)}</b>.`;
                     badgeClass = 'bg-emerald-100 text-emerald-800';
                     if (d.note) desc += `<br><span class="text-slate-400 italic">"${escapeHtml(d.note)}"</span>`;
                 } else if (type === 'swap_request') {
@@ -647,38 +647,38 @@ function renderHistoryView() {
                     icon = '🔀';
                     const cACode = USER_CENTER_KEYS[d.centerA] || d.centerA;
                     const cBCode = USER_CENTER_KEYS[d.centerB] || d.centerB;
-                    const cAInfo = CENTERS[cACode] || { name: d.centerA, color: 'bg-slate-600', text: 'text-white' };
-                    const cBInfo = CENTERS[cBCode] || { name: d.centerB, color: 'bg-slate-600', text: 'text-white' };
+                    const cAInfo = safeCenter(cACode);
+                    const cBInfo = safeCenter(cBCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${cAInfo.color} ${cAInfo.text}">${cAInfo.name}</span><span class="text-slate-400 text-xs mx-1">↔️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${cBInfo.color} ${cBInfo.text}">${cBInfo.name}</span>`;
-                    desc = `<b>${cAInfo.name}</b> (${d.paxA || '—'} pl. el ${d.dateA}) propuso permuta de fechas con <b>${cBInfo.name}</b> (${d.paxB || '—'} pl. el ${d.dateB}).`;
+                    desc = `<b>${cAInfo.name}</b> (${escapeHtml(d.paxA || '—')} pl. el ${escapeHtml(d.dateA)}) propuso permuta de fechas con <b>${cBInfo.name}</b> (${escapeHtml(d.paxB || '—')} pl. el ${escapeHtml(d.dateB)}).`;
                     badgeClass = 'bg-purple-100 text-purple-800';
                 } else if (type === 'release') {
                     title = 'Liberación al Pool';
                     icon = '🔓';
-                    desc = `<b>${cName}</b> liberó <b>${d.slots} plazas</b> al fondo común (${d.date}).`;
+                    desc = `<b>${cName}</b> liberó <b>${escapeHtml(d.slots)} plazas</b> al fondo común (${escapeHtml(d.date)}).`;
                     badgeClass = 'bg-rose-100 text-rose-800';
                     if (d.note) desc += `<br><span class="text-slate-400 italic">"${escapeHtml(d.note)}"</span>`;
                 } else if (type === 'claim') {
                     title = 'Plazas del Pool';
                     icon = '📥';
-                    desc = `<b>${cName}</b> tomó <b>${d.slots} plazas</b> del fondo común (${d.date}). Total centro: ${d.totalEffective || '—'} plazas.`;
+                    desc = `<b>${cName}</b> tomó <b>${escapeHtml(d.slots)} plazas</b> del fondo común (${escapeHtml(d.date)}). Total centro: ${escapeHtml(d.totalEffective || '—')} plazas.`;
                     badgeClass = 'bg-emerald-100 text-emerald-800';
                 } else if (type === 'admin_quota') {
                     title = 'Ajuste de Cupo';
                     icon = '⚙️';
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-800 text-white">ADMIN</span>`;
-                    desc = `El Administrador modificó el cupo del día <b>${d.date}</b> a <b>${d.newQuota} plazas</b>.`;
+                    desc = `El Administrador modificó el cupo del día <b>${escapeHtml(d.date)}</b> a <b>${escapeHtml(d.newQuota)} plazas</b>.`;
                     badgeClass = 'bg-slate-100 text-slate-800';
                 } else if (type === 'import_csv') {
                     title = 'Importación CSV';
                     icon = '📄';
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-800 text-white">ADMIN</span>`;
-                    desc = `El Administrador importó el cuadrante oficial (<b>${d.totalEntries} asignaciones</b> en <b>${d.daysCount} días</b>).`;
+                    desc = `El Administrador importó el cuadrante oficial (<b>${escapeHtml(d.totalEntries)} asignaciones</b> en <b>${escapeHtml(d.daysCount)} días</b>).`;
                     badgeClass = 'bg-teal-100 text-teal-800';
                 } else {
                     title = 'Operación';
                     icon = 'ℹ️';
-                    desc = `Acción registrada por <b>${cName}</b>${d.date ? ` para el ${d.date}` : ''}.`;
+                    desc = `Acción registrada por <b>${cName}</b>${d.date ? ` para el ${escapeHtml(d.date)}` : ''}.`;
                     badgeClass = 'bg-slate-100 text-slate-700';
                 }
 
@@ -977,8 +977,8 @@ function renderNotificationsList() {
         const isSent = currentNotificationsTab === 'sent';
 
         if (req.type === 'swap') {
-            const cA = CENTERS[req.centerA] || { name: req.centerA };
-            const cB = CENTERS[req.centerB] || { name: req.centerB };
+            const cA = safeCenter(req.centerA);
+            const cB = safeCenter(req.centerB);
             const dA = formatDateShort(parseDateT00(req.dateA));
             const dB = formatDateShort(parseDateT00(req.dateB));
 
@@ -994,7 +994,7 @@ function renderNotificationsList() {
                             }
                         </p>
                         <p class="text-xs text-slate-600 mt-1 leading-relaxed">
-                            <b>${cA.name}</b> pasa al <b>${dB}</b> (${req.paxA} pl.)${req.retainedPaxA > 0 ? ` [mantiene ${req.retainedPaxA} pl. el ${dA}]` : ''} ↔️ <b>${cB.name}</b> pasa al <b>${dA}</b> (${req.paxB} pl.)${req.retainedPaxB > 0 ? ` [mantiene ${req.retainedPaxB} pl. el ${dB}]` : ''}.
+                            <b>${cA.name}</b> pasa al <b>${dB}</b> (${escapeHtml(req.paxA)} pl.)${req.retainedPaxA > 0 ? ` [mantiene ${escapeHtml(req.retainedPaxA)} pl. el ${dA}]` : ''} ↔️ <b>${cB.name}</b> pasa al <b>${dA}</b> (${escapeHtml(req.paxB)} pl.)${req.retainedPaxB > 0 ? ` [mantiene ${escapeHtml(req.retainedPaxB)} pl. el ${dB}]` : ''}.
                         </p>
                     </div>
                 </div>
@@ -1019,10 +1019,10 @@ function renderNotificationsList() {
             `;
         } else if (req.type === 'donation' || req.type === 'request') {
             const isDonation = req.type === 'donation';
-            const initC = CENTERS[req.initiatorCenter] || { name: req.initiatorCenter };
-            const targetC = CENTERS[req.targetCenter] || { name: req.targetCenter };
+            const initC = safeCenter(req.initiatorCenter);
+            const targetC = safeCenter(req.targetCenter);
             const dFormatted = formatDateShort(parseDateT00(req.date));
-            const spotsText = req.isFull ? 'el barco completo' : `${req.requestedPax || req.pax} plazas`;
+            const spotsText = req.isFull ? 'el barco completo' : `${escapeHtml(req.requestedPax || req.pax)} plazas`;
 
             const icon = isDonation ? '🎁' : '🤲';
             const iconBg = isDonation ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600';

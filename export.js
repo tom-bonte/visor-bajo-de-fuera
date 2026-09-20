@@ -441,7 +441,7 @@ async function executePrintPDF() {
                 // Filas de centros
                 centerEntries.forEach((entry, rIdx) => {
                     const { code, bal } = entry;
-                    const cInfo = CENTERS[code] || { name: code, hex: '#64748b' };
+                    const cInfo = safeCenter(code);
                     const pdfStyle = PDF_CENTER_STYLES[code] || { bg: '#64748b', text: '#ffffff' };
 
                     if (rIdx % 2 === 1) {

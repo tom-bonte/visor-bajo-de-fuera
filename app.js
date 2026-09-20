@@ -354,7 +354,7 @@ function confirmNewSalida() {
 
     const targetCenterKey = currentUserKey === 'admin' ? getEl('new-salida-center').value : currentUserKey;
     const centerCode = USER_CENTER_KEYS[targetCenterKey] || 'M';
-    const centerInfo = CENTERS[centerCode] || { name: targetCenterKey, emoji: '⛵' };
+    const centerInfo = safeCenter(centerCode);
     const dObj = parseDateT00(date);
     const note = sanitizeNote(getEl('new-salida-note')?.value || '');
 
@@ -474,8 +474,8 @@ function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
     const isInitiator = !isAdmin && normCenter(pendingReq.initiatorCenter) === normCenter(myCenterCode);
     const isTarget = !isAdmin && normCenter(pendingReq.targetCenter) === normCenter(myCenterCode);
 
-    const initInfo = CENTERS[pendingReq.initiatorCenter] || { name: pendingReq.initiatorCenter || 'Centro' };
-    const targetInfo = CENTERS[pendingReq.targetCenter] || { name: pendingReq.targetCenter || 'Centro' };
+    const initInfo = safeCenter(pendingReq.initiatorCenter);
+    const targetInfo = safeCenter(pendingReq.targetCenter);
 
     const modalTitle = getEl('pending-modal-title');
     const modalSubtitle = getEl('pending-modal-subtitle');
@@ -487,10 +487,10 @@ function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
 
     if (pendingReq.type === 'swap') {
         typeText = 'Propuesta de Intercambio';
-        const cA = CENTERS[pendingReq.centerA] || { name: pendingReq.centerA };
-        const cB = CENTERS[pendingReq.centerB] || { name: pendingReq.centerB };
-        const paxA = pendingReq.paxA !== undefined ? pendingReq.paxA : (pendingReq.salidaA?.pax || '?');
-        const paxB = pendingReq.paxB !== undefined ? pendingReq.paxB : (pendingReq.salidaB?.pax || '?');
+        const cA = safeCenter(pendingReq.centerA);
+        const cB = safeCenter(pendingReq.centerB);
+        const paxA = escapeHtml(pendingReq.paxA !== undefined ? pendingReq.paxA : (pendingReq.salidaA?.pax || '?'));
+        const paxB = escapeHtml(pendingReq.paxB !== undefined ? pendingReq.paxB : (pendingReq.salidaB?.pax || '?'));
         const dA = formatDateShort(parseDateT00(pendingReq.dateA));
         const dB = formatDateShort(parseDateT00(pendingReq.dateB));
 
@@ -514,7 +514,7 @@ function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
         `;
     } else if (pendingReq.type === 'request') {
         typeText = 'Petición de Plazas';
-        const spots = pendingReq.isAll ? 'todas las plazas' : `${pendingReq.requestedPax || '?'} plazas`;
+        const spots = pendingReq.isAll ? 'todas las plazas' : `${escapeHtml(pendingReq.requestedPax || '?')} plazas`;
         const dFormatted = formatDateShort(parseDateT00(pendingReq.date));
 
         detailsHtml = `
@@ -536,7 +536,7 @@ function openPendingRequestActionModal(pendingReq, dateStr, centerCode) {
         `;
     } else {
         typeText = 'Cesión de Plazas';
-        const spots = pendingReq.isFull ? 'el barco completo' : `${pendingReq.requestedPax || pendingReq.pax || '?'} plazas`;
+        const spots = pendingReq.isFull ? 'el barco completo' : `${escapeHtml(pendingReq.requestedPax || pendingReq.pax || '?')} plazas`;
         const dFormatted = formatDateShort(parseDateT00(pendingReq.date));
 
         detailsHtml = `
@@ -613,7 +613,7 @@ function openEditSalidaModal(dateStr, salidaId, centerCode) {
     const daySalidas = getDaySalidas(dayData, dateStr);
     const targetSalida = daySalidas.find(s => s.id === salidaId || s.centerCode === centerCode) || { id: salidaId, pax: 10, note: '' };
     const currentPax = targetSalida.pax;
-    const centerInfo = CENTERS[centerCode] || { name: centerCode, color: 'bg-slate-700', text: 'text-white' };
+    const centerInfo = safeCenter(centerCode);
     const dObj = parseDateT00(dateStr);
 
     const summary = getDaySummary(dayData, dateStr);
@@ -703,7 +703,7 @@ function confirmEditSalida() {
 
     const note = sanitizeNote(getEl('edit-salida-note')?.value || '');
     const newCenterCode = currentUserKey === 'admin' ? getEl('edit-salida-center').value : pendingEditSalida.centerCode;
-    const centerInfo = CENTERS[newCenterCode] || { name: newCenterCode, emoji: '⛵' };
+    const centerInfo = safeCenter(newCenterCode);
     const dObj = parseDateT00(dateStr);
 
     hideEl('edit-salida-modal');
@@ -761,7 +761,7 @@ function cancelDeleteSalida() {
 function confirmDeleteSalida() {
     if (!pendingEditSalida) return;
     const { dateStr, salidaId, centerCode } = pendingEditSalida;
-    const centerInfo = CENTERS[centerCode] || { name: centerCode, emoji: '⛵' };
+    const centerInfo = safeCenter(centerCode);
     const dObj = parseDateT00(dateStr);
 
     hideEl('delete-confirm-modal');
@@ -814,7 +814,7 @@ function openCesionDirectaFromEdit() {
 function openCesionDirectaModal(dateStr, salidaId, fromCenterCode, currentPax) {
     pendingCesionDirecta = { dateStr, salidaId, fromCenterCode, currentPax };
 
-    const cInfo = CENTERS[fromCenterCode] || { name: fromCenterCode };
+    const cInfo = safeCenter(fromCenterCode);
     const dObj = parseDateT00(dateStr);
 
     getEl('cesion-directa-subtitle').textContent = `Bajo de Fuera · ${formatDateShort(dObj)}`;
@@ -866,8 +866,8 @@ function confirmCesionDirecta() {
 
     hideEl('cesion-directa-modal');
 
-    const fromInfo = CENTERS[fromCenterCode] || { name: fromCenterCode, emoji: '⛵' };
-    const targetInfo = CENTERS[targetCenter] || { name: targetCenter, emoji: '⛵' };
+    const fromInfo = safeCenter(fromCenterCode);
+    const targetInfo = safeCenter(targetCenter);
     const dObj = parseDateT00(dateStr);
 
     // 1-step direct transfer: no confirmation needed from the other dive center
@@ -905,7 +905,7 @@ function openProponerIntercambioFromEdit() {
         targetDate: null
     };
 
-    const cInfo = CENTERS[centerCode] || { name: centerCode };
+    const cInfo = safeCenter(centerCode);
     const dObj = parseDateT00(dateStr);
 
     getEl('propose-swap-subtitle').textContent = `Bajo de Fuera · ${formatDateShort(dObj)}`;
@@ -1020,7 +1020,7 @@ async function handleProposeSwapDateChange(selectedDateStr) {
 
             otherSchoolsSalidas.forEach(s => {
                 const sCode = normCenter(s.centerCode);
-                const cInfo = CENTERS[sCode] || { name: sCode, hex: '#64748b' };
+                const cInfo = safeCenter(sCode);
                 const totalPax = Number(s.plazas !== undefined ? s.plazas : s.pax) || 0;
                 const pendingReq = getPendingRequestForSalida(s.id, selectedDateStr, sCode);
 
@@ -1141,7 +1141,7 @@ function promptDonationRequest(dateStr, salidaId, targetCenterCode) {
     const daySalidas = getDaySalidas(dayData, dateStr);
     const targetSalida = daySalidas.find(s => s.id === salidaId || s.centerCode === targetCenterCode);
     const maxPax = targetSalida ? targetSalida.pax : 10;
-    const targetInfo = CENTERS[targetCenterCode] || { name: targetCenterCode, emoji: '⛵' };
+    const targetInfo = safeCenter(targetCenterCode);
     const dObj = parseDateT00(dateStr);
 
     pendingDonationRequest = {
@@ -1185,9 +1185,9 @@ function confirmDonationRequest() {
 
     const requestedPax = isFull ? maxPax : pax;
     const { dateStr, salidaId, targetCenterCode } = pendingDonationRequest;
-    const targetInfo = CENTERS[targetCenterCode] || { name: targetCenterCode, emoji: '⛵' };
+    const targetInfo = safeCenter(targetCenterCode);
     const myCode = USER_CENTER_KEYS[currentUserKey];
-    const myInfo = CENTERS[myCode] || { name: currentUserKey, emoji: '⛵' };
+    const myInfo = safeCenter(myCode);
     const dObj = parseDateT00(dateStr);
 
     const msg = `🤖 *AVISO AUTOMÁTICO*\n🙏 *SOLICITUD DE PLAZAS* - ${myInfo.emoji} ${myInfo.name} a ${targetInfo.emoji} ${targetInfo.name}\nPara el ${dObj.getDate()} de ${MONTHS_ES[dObj.getMonth()].toUpperCase()}, solicita que le ceda ${isFull ? '*EL BARCO COMPLETO*' : `*${requestedPax} plazas*`} en *Bajo de Fuera*. Entrad al visor para acordarlo.`;
@@ -1406,7 +1406,7 @@ function showSwapChoiceModal(sourceBoat, targetDate, otherSchoolsSalidas, freeSp
 
     // Opción 2: Botones de Intercambio (uno por cada salida individual de otra escuela)
     otherSchoolsSalidas.forEach(targetSalida => {
-        const cInfo = CENTERS[targetSalida.centerCode] || { name: targetSalida.centerCode, color: 'bg-slate-700', text: 'text-white' };
+        const cInfo = safeCenter(targetSalida.centerCode);
         const isTargetLocked = !!getPendingRequestForSalida(targetSalida.id, targetDate, targetSalida.centerCode);
 
         const btnSwap = document.createElement('button');
@@ -1520,8 +1520,8 @@ async function initiateSwap(sourceBoat, targetSalida) {
 
     // Si alguno de los barcos se debe dividir por cupo
     if (paxA > spaceB || paxB > spaceA) {
-        const cAInfo = CENTERS[centerA] || { name: centerA };
-        const cBInfo = CENTERS[centerB] || { name: centerB };
+        const cAInfo = safeCenter(centerA);
+        const cBInfo = safeCenter(centerB);
         const dA = formatDateShort(parseDateT00(dateA));
         const dB = formatDateShort(parseDateT00(dateB));
 
@@ -1550,7 +1550,7 @@ async function initiateSwap(sourceBoat, targetSalida) {
  */
 function executeMoveWithAdminCheck(sourceDate, targetDate, salidaId, centerCode, pax) {
     const normCode = normCenter(centerCode);
-    const centerInfo = CENTERS[normCode] || { name: normCode, emoji: '⛵' };
+    const centerInfo = safeCenter(normCode);
     const d1 = formatDateShort(parseDateT00(sourceDate));
     const d2 = formatDateShort(parseDateT00(targetDate));
 
@@ -1588,8 +1588,8 @@ function executeMoveWithAdminCheck(sourceDate, targetDate, salidaId, centerCode,
 function executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, dateB, salidaIdB, centerB, safeB, retainedB, spaceA = null, spaceB = null) {
     const normA = normCenter(centerA);
     const normB = normCenter(centerB);
-    const cAInfo = CENTERS[normA] || { name: normA, emoji: '⛵' };
-    const cBInfo = CENTERS[normB] || { name: normB, emoji: '⛵' };
+    const cAInfo = safeCenter(normA);
+    const cBInfo = safeCenter(normB);
     const dA = formatDateShort(parseDateT00(dateA));
     const dB = formatDateShort(parseDateT00(dateB));
 
@@ -1608,7 +1608,7 @@ function executeSwapWithAdminCheck(dateA, salidaIdA, centerA, safeA, retainedA, 
 
     const myCode = USER_CENTER_KEYS[currentUserKey];
     const targetCenter = (normA === normCenter(myCode)) ? normB : normA;
-    const targetInfo = CENTERS[normCenter(targetCenter)] || { name: targetCenter };
+    const targetInfo = safeCenter(normCenter(targetCenter));
 
     const msg = `🤖 *AVISO AUTOMÁTICO*\n🔀 *PROPUESTA DE INTERCAMBIO* - ${cAInfo.emoji} ${cAInfo.name} ↔️ ${cBInfo.emoji} ${cBInfo.name}\n${cAInfo.name} pasa del ${dA} al ${dB} (${safeA} plazas), y ${cBInfo.name} pasa al ${dA} (${safeB} plazas). Entrad al visor para acordarlo.`;
 
@@ -1850,7 +1850,7 @@ function processCsvText(text) {
         const centersDiv = getEl('csv-preview-centers');
         if (centersDiv) {
             centersDiv.innerHTML = Object.entries(parsed.centersCount).map(([code, count]) => {
-                const c = CENTERS[code] || { name: code, color: 'bg-slate-700', text: 'text-white' };
+                const c = safeCenter(code);
                 return `
                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${c.color} ${c.text} shadow-2xs">
                         <span>${c.name}:</span> <span>${count} pl.</span>

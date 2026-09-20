@@ -109,4 +109,31 @@ ok('sin conexión → explica que no se ha cambiado nada', describeFirestoreErro
 ok('choque entre escuelas → pide reintentar', describeFirestoreError({ code: 'aborted' }, 'guardar').includes('al mismo tiempo'));
 ok('sesión caducada → pide volver a entrar', describeFirestoreError({ code: 'permission-denied' }, 'guardar').includes('Cierra sesión'));
 
+/* ------------------------------------------------------------- SEGURIDAD */
+section('Nombres de centro venidos de Firestore (anti-XSS)');
+
+const { safeCenter, escapeHtml } = app;
+const UNKNOWN_CENTER = app.evaluate('UNKNOWN_CENTER');
+const PAYLOAD = '<img src=x onerror="alert(1)">';
+
+check('código conocido', safeCenter('M').name, 'Mangamar');
+check('clave de usuario también vale', safeCenter('mangamar').name, 'Mangamar');
+check('no distingue mayúsculas', safeCenter('md').name, 'Moondive');
+check('código desconocido → marcador fijo', safeCenter('ZZZ').name, UNKNOWN_CENTER.name);
+check('vacío / nulo → marcador fijo', [safeCenter('').name, safeCenter(null).name, safeCenter(undefined).name],
+    [UNKNOWN_CENTER.name, UNKNOWN_CENTER.name, UNKNOWN_CENTER.name]);
+
+// Lo esencial: NUNCA devolver al HTML lo que venía de la base de datos.
+ok('un payload malicioso nunca se devuelve como nombre', !safeCenter(PAYLOAD).name.includes('<'));
+check('un payload malicioso se pinta como marcador', safeCenter(PAYLOAD).name, UNKNOWN_CENTER.name);
+ok('tampoco se cuela por el color ni por el hex',
+    !JSON.stringify(safeCenter(PAYLOAD)).includes('onerror'));
+
+const nastyInputs = [PAYLOAD, '"><script>x</script>', "' onmouseover='x", '</b><svg onload=x>', 'M<script>', {}, [], 0, true];
+ok('ninguna entrada rara produce un nombre con HTML',
+    nastyInputs.every(v => !String(safeCenter(v).name).match(/[<>"']/)));
+
+ok('escapeHtml neutraliza el payload', escapeHtml(PAYLOAD) === '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+ok('escapeHtml también las comillas simples', escapeHtml("' onmouseover='x").includes('&#039;'));
+
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));

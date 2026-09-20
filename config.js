@@ -93,6 +93,41 @@ const CENTERS = {
 };
 
 /**
+ * Centro de reemplazo para códigos desconocidos o manipulados.
+ * Nunca contiene datos venidos de Firestore.
+ */
+const UNKNOWN_CENTER = Object.freeze({
+    key: 'desconocido',
+    name: 'Centro desconocido',
+    emoji: '⛵',
+    color: 'bg-slate-500',
+    text: 'text-white',
+    hex: '#64748b',
+    pastelBg: 'bg-slate-100',
+    pastelBorder: 'border-slate-300'
+});
+
+/**
+ * Devuelve SIEMPRE un centro con datos seguros para pintar en pantalla.
+ *
+ * Nunca devuelve el valor recibido: si el código no es uno de los ocho
+ * conocidos, se usa un marcador fijo. Antes se hacía `CENTERS[x] || { name: x }`,
+ * de modo que un código manipulado en Firestore acababa insertado tal cual en el
+ * HTML del historial o de las notificaciones, y se ejecutaba en el navegador de
+ * quien lo mirase.
+ *
+ * Acepta tanto el código ('M') como la clave de usuario ('mangamar').
+ *
+ * @param {string} code
+ * @returns {Object} Entrada de CENTERS, o UNKNOWN_CENTER.
+ */
+function safeCenter(code) {
+    const raw = String(code === null || code === undefined ? '' : code).trim();
+    const viaUserKey = USER_CENTER_KEYS[raw.toLowerCase()];
+    return CENTERS[viaUserKey || raw.toUpperCase()] || UNKNOWN_CENTER;
+}
+
+/**
  * Mapeo entre usuarios de autenticación y correos pseudo-locales de Firebase Auth.
  */
 const EMAIL_MAP = {

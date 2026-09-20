@@ -57,6 +57,12 @@ function loadApp() {
         const code = fs.readFileSync(path.join(ROOT, file), 'utf8');
         vm.runInContext(code, sandbox, { filename: file });
     }
+
+    // Las declaraciones `const`/`let` de nivel superior NO quedan como propiedades
+    // del objeto global del contexto (sólo las `function` y `var`), así que para
+    // leerlas desde los tests hace falta evaluar dentro del propio contexto.
+    sandbox.evaluate = (expression) => vm.runInContext(expression, sandbox);
+
     return sandbox;
 }
 
