@@ -355,3 +355,12 @@ function parseCsvSchedule(text) {
 
     return { daysMap, salidasMap: consolidatedSalidasMap, totalEntries, ignoredRows, dateMin, dateMax, centersCount };
 }
+
+// Los tests y la función del servidor cargan este fichero con require(); el
+// navegador ignora estas líneas y sigue usando las funciones como globales.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        parseDateT00, getStrYMD, escapeHtml, sanitizeNote, clamp,
+        normalizeCenterCode, normCenter, normalizeDateStr, parseCsvSchedule
+    };
+}

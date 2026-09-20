@@ -53,7 +53,7 @@ function loadApp() {
     sandbox.window = sandbox;
     vm.createContext(sandbox);
 
-    for (const file of ['config.js', 'utils.js', 'state.js', 'firebase-service.js']) {
+    for (const file of ['config.js', 'utils.js', 'bdf-logic.js', 'state.js', 'firebase-service.js']) {
         const code = fs.readFileSync(path.join(ROOT, file), 'utf8');
         vm.runInContext(code, sandbox, { filename: file });
     }

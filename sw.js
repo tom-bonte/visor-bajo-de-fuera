@@ -8,6 +8,7 @@ const PRECACHE_ASSETS = [
     './error-reporter.js',
     './config.js',
     './utils.js',
+    './bdf-logic.js',
     './state.js',
     './firebase-service.js',
     './export.js',

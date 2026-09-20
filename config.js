@@ -237,3 +237,12 @@ const BDF_COLLECTIONS = {
     HISTORY: "bdf_history_logs",
     REQUESTS: "bdf_requests"
 };
+
+// Igual que utils.js: en Node se exporta lo que necesita la función del
+// servidor; en el navegador estas líneas no hacen nada.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        DEFAULT_DAILY_CAP, MAX_BOAT_CAP, getDayQuota, CENTERS, safeCenter,
+        EMAIL_MAP, USER_CENTER_KEYS, CENTER_TO_USER_KEY, BDF_COLLECTIONS
+    };
+}
