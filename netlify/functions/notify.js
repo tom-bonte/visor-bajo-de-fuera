@@ -8,11 +8,19 @@
  * una variable de entorno de Netlify, y para llegar a ella hay que presentar un
  * token de sesión válido de un centro.
  *
- * Variables de entorno necesarias (Netlify → Site settings → Environment variables):
- *   MAKE_WEBHOOK_URL   URL del webhook NUEVO de Make.com
- *   FIREBASE_API_KEY   apiKey del proyecto (la misma que ya es pública en config.js;
- *                      sólo se usa para pedirle a Google que valide el token)
+ * Variable de entorno necesaria (Netlify → Site settings → Environment variables):
+ *   MAKE_WEBHOOK_URL   URL del webhook NUEVO de Make.com. Marcar como secreta.
+ *
+ * La apiKey de Firebase va aquí escrita directamente y NO como variable de entorno,
+ * a propósito: no es un secreto (es un identificador público, ya visible en
+ * config.js y en cualquier app web de Firebase), y si se registrase como variable
+ * de entorno el escáner de secretos de Netlify encontraría ese mismo valor dentro
+ * de config.js al desplegar y haría fallar la compilación.
  */
+
+// Identificador público del proyecto Firebase; sólo sirve para pedirle a Google
+// que valide un token. No concede ningún acceso por sí mismo.
+const FIREBASE_API_KEY = 'AIzaSyBe7X5AUC-PpcJSCYgMzyyUMJMPqxtTdiw';
 
 const ALLOWED_EMAIL_DOMAIN = '@visor.local';
 const MAX_MESSAGE_LENGTH = 2000;
@@ -32,9 +40,8 @@ exports.handler = async (event) => {
     }
 
     const webhookUrl = process.env.MAKE_WEBHOOK_URL;
-    const apiKey = process.env.FIREBASE_API_KEY;
-    if (!webhookUrl || !apiKey) {
-        console.error('[notify] Faltan variables de entorno: MAKE_WEBHOOK_URL y/o FIREBASE_API_KEY.');
+    if (!webhookUrl) {
+        console.error('[notify] Falta la variable de entorno MAKE_WEBHOOK_URL.');
         return respond(500, { error: 'El servicio de avisos no está configurado.' });
     }
 
@@ -64,7 +71,7 @@ exports.handler = async (event) => {
     // dependencias: basta con la apiKey pública del proyecto.
     let email = '';
     try {
-        const verification = await fetch(`${VERIFY_URL}?key=${encodeURIComponent(apiKey)}`, {
+        const verification = await fetch(`${VERIFY_URL}?key=${encodeURIComponent(FIREBASE_API_KEY)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idToken })

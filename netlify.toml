@@ -3,9 +3,8 @@
   command = ""
 
 # Proxy autenticado hacia el webhook de WhatsApp (netlify/functions/notify.js).
-# Requiere estas variables de entorno en Netlify → Site settings → Environment variables:
-#   MAKE_WEBHOOK_URL   URL del webhook de Make.com (SECRETA: nunca en el código)
-#   FIREBASE_API_KEY   apiKey del proyecto Firebase
+# Requiere esta variable de entorno en Netlify → Site settings → Environment variables:
+#   MAKE_WEBHOOK_URL   URL del webhook de Make.com (SECRETA: marcar "Contains secret values")
 [functions]
   directory = "netlify/functions"
 

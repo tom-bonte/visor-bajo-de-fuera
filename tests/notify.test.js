@@ -33,7 +33,6 @@ const req = (over = {}) => ({
 
 (async () => {
     process.env.MAKE_WEBHOOK_URL = 'https://hook.example/test';
-    process.env.FIREBASE_API_KEY = 'fake-key';
 
     section('Quién puede publicar en el grupo de WhatsApp');
 
@@ -73,6 +72,7 @@ const req = (over = {}) => ({
     r = await handler(req());
     check('sin MAKE_WEBHOOK_URL → 500', r.statusCode, 500);
     ok('el error no revela la configuración interna', !JSON.stringify(r.body).includes('MAKE_WEBHOOK_URL'));
+    ok('la apiKey pública no se registra como variable de entorno', process.env.FIREBASE_API_KEY === undefined);
     process.env.MAKE_WEBHOOK_URL = 'https://hook.example/test';
 
     stubFetch({ makeOk: false });
