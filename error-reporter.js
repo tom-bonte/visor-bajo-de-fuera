@@ -19,7 +19,6 @@
     'use strict';
 
     var MAX_BUFFER = 20;              // más que esto y ya no es un fallo, es una avería
-    var SDK = 'https://browser.sentry-cdn.com/8.30.0/bundle.min.js';
 
     var buffer = [];
     var started = false;
@@ -81,16 +80,16 @@
 
     /**
      * Arranca el envío a Sentry. Se llama desde app.js cuando config.js ya está
-     * cargado. Sin DSN no se descarga nada: ninguna escuela paga con su batería
+     * cargado. Sin URL no se descarga nada: ninguna escuela paga con su batería
      * un script que no vamos a usar.
      */
-    function start(dsn, datos) {
+    function start(loaderUrl, datos) {
         setContext(datos);
         if (started) return;
         started = true;
 
-        if (!dsn) {
-            console.log('[BDF] Sin SENTRY_DSN configurado: los fallos sólo se ven en esta consola.');
+        if (!loaderUrl) {
+            console.log('[BDF] Sin SENTRY_LOADER_URL configurado: los fallos sólo se ven en esta consola.');
             return;
         }
         if (isLocal()) {
@@ -99,23 +98,22 @@
         }
 
         var script = document.createElement('script');
-        script.src = SDK;
+        script.src = loaderUrl;
         script.crossOrigin = 'anonymous';
         script.onload = function () {
             try {
-                window.Sentry.init({
-                    dsn: dsn,
-                    // Nada de sesiones grabadas ni medición de rendimiento: sólo fallos.
-                    tracesSampleRate: 0,
-                    beforeSend: scrub
-                });
-                window.Sentry.setTag('centro', context.centro);
-                buffer.forEach(function (entry) {
-                    window.Sentry.captureException(entry.original || new Error(entry.message), {
-                        tags: { tipo: entry.kind, centro: context.centro }
+                // El cargador de Sentry deja un Sentry de mentira que va apuntando
+                // lo que ocurra; onLoad se ejecuta cuando ya está el de verdad.
+                window.Sentry.onLoad(function () {
+                    window.Sentry.init({
+                        // Sólo fallos: ni grabación de sesiones ni medición de
+                        // rendimiento. Nadie está vigilando cómo trabajan las escuelas.
+                        tracesSampleRate: 0,
+                        beforeSend: scrub
                     });
+                    window.Sentry.setTag('centro', context.centro);
                 });
-                buffer = [];
+                flush();
             } catch (e) {
                 console.error('[BDF] Sentry no ha arrancado:', e);
             }
@@ -124,6 +122,17 @@
             console.warn('[BDF] No se ha podido cargar Sentry. La app sigue funcionando.');
         };
         document.head.appendChild(script);
+    }
+
+    /** Reenvía a Sentry los fallos ocurridos antes de que estuviera disponible. */
+    function flush() {
+        if (!window.Sentry || !window.Sentry.captureException) return;
+        buffer.forEach(function (entry) {
+            window.Sentry.captureException(entry.original || new Error(entry.message), {
+                tags: { tipo: entry.kind, centro: context.centro }
+            });
+        });
+        buffer = [];
     }
 
     /**

@@ -218,11 +218,18 @@ const firebaseConfig = {
 };
 
 /**
- * Sentry: avisos de fallos del navegador. Vacío = no se carga nada de fuera y
- * los fallos sólo se ven en la consola. El DSN es público por diseño (viaja en
- * el navegador de todas las escuelas); no es una contraseña.
+ * Sentry: avisos de fallos del navegador.
+ *
+ * Es el "Loader Script" que da Sentry al crear el proyecto. Se usa ese y no el
+ * SDK completo porque pesa ~2 KB: se carga siempre, pero sólo descarga la
+ * librería entera si de verdad ocurre un fallo. Las escuelas que tienen un día
+ * normal no pagan nada por esto.
+ *
+ * Vacío = no se carga nada de fuera y los fallos sólo se ven en la consola.
+ * La clave que lleva dentro es pública por diseño (viaja en el navegador de
+ * todas las escuelas): sólo permite ENVIAR fallos, nunca leerlos.
  */
-const SENTRY_DSN = "";
+const SENTRY_LOADER_URL = "https://js-de.sentry-cdn.com/0a4180fa4666eb1471a7ef451fba62a4.min.js";
 
 /** Colecciones Firestore de Bajo de Fuera (completamente independientes) */
 const BDF_COLLECTIONS = {

@@ -13,6 +13,9 @@ const { section, check, ok, report } = require('./assert');
 
 const ROOT = path.join(__dirname, '..');
 
+/** El cargador que da Sentry al crear el proyecto (clave pública). */
+const LOADER = 'https://js-de.sentry-cdn.com/clavedeprueba.min.js';
+
 /** Navegador de juguete: sólo lo que el fichero usa de verdad. */
 function loadReporter({ hostname = 'visor.netlify.app', protocol = 'https:' } = {}) {
     const listeners = {};
@@ -57,32 +60,32 @@ ok('y el mensaje original', inicial.api._buffer()[0].message.includes('calendari
 ok('también se ven en la consola', inicial.logs.some(l => l[0] === 'error' && l[1].includes('calendario')));
 
 // -------------------------------------------------------------------------
-section('Sin DSN no se carga nada de fuera');
+section('Sin configurar no se carga nada de fuera');
 
 const sinDsn = loadReporter();
 sinDsn.api.start('', { centro: 'moondive' });
 check('ningún script añadido a la página', sinDsn.added.length, 0);
-ok('lo dice claramente en la consola', sinDsn.logs.some(l => l[1].includes('Sin SENTRY_DSN')));
+ok('lo dice claramente en la consola', sinDsn.logs.some(l => l[1].includes('Sin SENTRY_LOADER_URL')));
 
 // -------------------------------------------------------------------------
 section('En local no se avisa a nadie');
 
 const local = loadReporter({ hostname: 'localhost', protocol: 'http:' });
 ok('reconoce el entorno local', local.api.isLocal());
-local.api.start('https://abc@o1.ingest.sentry.io/2', { centro: 'admin' });
+local.api.start(LOADER, { centro: 'admin' });
 check('no se carga Sentry probando en el portátil', local.added.length, 0);
 ok('lo avisa', local.logs.some(l => l[1].includes('Entorno local')));
 
 const produccion = loadReporter();
 check('en el sitio real no es local', produccion.api.isLocal(), false);
-produccion.api.start('https://abc@o1.ingest.sentry.io/2', { centro: 'hormigas' });
+produccion.api.start(LOADER, { centro: 'hormigas' });
 check('ahí sí se carga Sentry', produccion.added.length, 1);
-ok('desde el CDN oficial de Sentry', String(produccion.added[0].src).startsWith('https://browser.sentry-cdn.com/'));
+ok('desde el CDN oficial de Sentry', /^https:\/\/[\w-]+\.sentry-cdn\.com\//.test(String(produccion.added[0].src)));
 
 // -------------------------------------------------------------------------
 section('Arrancar dos veces no duplica nada');
 
-produccion.api.start('https://abc@o1.ingest.sentry.io/2', { centro: 'hormigas' });
+produccion.api.start(LOADER, { centro: 'hormigas' });
 check('sigue habiendo un solo script', produccion.added.length, 1);
 
 // -------------------------------------------------------------------------
@@ -127,6 +130,11 @@ const swJs = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 ok('error-reporter.js se carga antes que cualquier otro script',
     indexHtml.indexOf('error-reporter.js') < indexHtml.indexOf('cdn.tailwindcss.com'));
 ok('la app le dice qué centro es', /errorReporter\.start\(/.test(appJs));
+
+const configJs = fs.readFileSync(path.join(ROOT, 'config.js'), 'utf8');
+ok('config.js define el cargador de Sentry', /SENTRY_LOADER_URL\s*=/.test(configJs));
+ok('y app.js usa esa misma constante', appJs.includes('SENTRY_LOADER_URL'));
+ok('es un cargador de Sentry, no otra cosa', /SENTRY_LOADER_URL\s*=\s*"(|https:\/\/[\w-]+\.sentry-cdn\.com\/[\w]+\.min\.js)"/.test(configJs));
 ok('los fallos que antes morían en la consola ahora se avisan', /reportFailure\(/.test(serviceJs));
 check('ya no quedan console.error sueltos en firebase-service.js',
     (serviceJs.match(/console\.error/g) || []).length, 1); // el único que queda está DENTRO de reportFailure

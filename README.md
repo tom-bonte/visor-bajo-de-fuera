@@ -88,10 +88,10 @@ avisos:
 
 1. Crear una cuenta gratuita en [sentry.io](https://sentry.io) y un proyecto de
    tipo **Browser → JavaScript**.
-2. Copiar el DSN que da Sentry (empieza por `https://…@…ingest.sentry.io/…`).
-3. Pegarlo en `SENTRY_DSN` en `config.js` y desplegar.
+2. Copiar la URL del *Loader Script* (`https://js-XX.sentry-cdn.com/….min.js`).
+3. Pegar el **Loader Script** que da Sentry en `SENTRY_LOADER_URL` en `config.js`.
 
-El DSN es público por diseño: viaja en el navegador de todas las escuelas y no
+La clave que lleva dentro es pública por diseño: viaja en el navegador de todas las escuelas y no
 es una contraseña. Aun así, antes de enviar nada se limpia el informe
 (`scrub()`): se recorta la URL, se quita el usuario y se tapan los correos.
 Desde `localhost` nunca se envía nada.

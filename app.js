@@ -23,7 +23,7 @@ auth.onAuthStateChanged((user) => {
     // le dice QUIÉN está usando la app y se le da permiso para enviar. Un fallo
     // sin saber de qué escuela viene no se puede reproducir.
     if (window.errorReporter) {
-        errorReporter.start(typeof SENTRY_DSN !== 'undefined' ? SENTRY_DSN : '', { centro: currentUserKey });
+        errorReporter.start(typeof SENTRY_LOADER_URL !== 'undefined' ? SENTRY_LOADER_URL : '', { centro: currentUserKey });
         errorReporter.setContext({ centro: currentUserKey });
     }
 
