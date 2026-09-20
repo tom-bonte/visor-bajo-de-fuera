@@ -36,6 +36,15 @@ async function sendBdfWebhook(msg) {
         return;
     }
 
+    // En local no existe la función de Netlify (el servidor de pruebas sólo sirve
+    // ficheros), así que la petición fallaría con un 501 confuso. Se avisa claro
+    // y no se envía: probar en local nunca debe escribir en el grupo real.
+    if (typeof location !== 'undefined' &&
+        (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')) {
+        console.log('[WhatsApp] Entorno local: el aviso NO se envía. Mensaje preparado:\n' + msg);
+        return;
+    }
+
     // El aviso pasa por el proxy de Netlify, que guarda la URL real del webhook
     // y exige un token de sesión válido. Sin sesión no se envía nada.
     const user = auth.currentUser;

@@ -181,5 +181,6 @@ ok('el cliente apunta al proxy', app.evaluate('WHATSAPP_PROXY_PATH') === '/.netl
 ok('sendBdfWebhook exige sesión iniciada', app.sendBdfWebhook.toString().includes('auth.currentUser'));
 ok('sendBdfWebhook manda el token de sesión', app.sendBdfWebhook.toString().includes('getIdToken'));
 ok('el admin sigue sin enviar avisos', app.sendBdfWebhook.toString().includes("currentUserKey === 'admin'"));
+ok('en local no se envía nada al grupo real', app.sendBdfWebhook.toString().includes("location.hostname === 'localhost'"));
 
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));
