@@ -4,10 +4,11 @@
   "private": true,
   "description": "Tests de la app. Viven aparte: la app en sí no tiene build ni dependencias.",
   "scripts": {
-    "test": "npm run test:logic && npm run test:notify && npm run test:rules",
+    "test": "npm run test:logic && npm run test:backup && npm run test:notify && npm run test:rules",
     "test:logic": "node logic.test.js",
     "test:rules": "firebase --config ../firebase.json emulators:exec --only firestore --project demo-bdf \"node rules.test.js\"",
-    "test:notify": "node notify.test.js"
+    "test:notify": "node notify.test.js",
+    "test:backup": "node backup.test.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4",

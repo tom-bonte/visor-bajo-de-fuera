@@ -32,3 +32,44 @@ Sistema interactivo de gestión de plazas y calendario oficial para el Bajo de F
 ## 🚀 Despliegue en Netlify
 
 El proyecto está configurado con [`netlify.toml`](./netlify.toml) para despliegue estático continuo sin pasos de compilación.
+
+---
+
+## 💾 Copias de seguridad
+
+Todas las noches, a las 03:15 UTC, GitHub Actions ejecuta
+[`scripts/backup.js`](./scripts/backup.js) y guarda una copia completa de
+`bdf_days` y `bdf_history_logs` como *artefacto* del repositorio, con 90 días de
+retención. No hace falta ninguna contraseña: esas dos colecciones son de lectura
+pública (es lo que permite el modo consulta), así que la copia usa la misma clave
+pública que ya viaja en `config.js`.
+
+**Descargar una copia**: pestaña *Actions* → *copia de seguridad diaria* → la
+ejecución del día → *Artifacts*. También se puede lanzar a mano con *Run workflow*.
+
+**Hacer una copia ahora, en local**:
+
+```bash
+node scripts/backup.js
+```
+
+**Restaurar** (simulacro por defecto; no escribe nada hasta añadir `--apply`):
+
+```bash
+node scripts/restore.js backups/bdf-backup-2026-09-20T1544Z.json --only=2026-12-31
+node scripts/restore.js backups/bdf-backup-2026-09-20T1544Z.json --only=2026-12-31 --apply
+```
+
+Restaurar `bdf_days` funciona con la cuenta de cualquier centro. El historial
+(`bdf_history_logs`) es inmutable por reglas, así que sólo se puede restaurar con
+la cuenta de administrador.
+
+Cada copia lleva fecha **y hora** en el nombre, y el script se niega a
+sobrescribir una copia que ya existe. Esto no es un capricho: en el primer
+simulacro real, una segunda copia del mismo día pisó a la de por la mañana —
+justo la buena— y la restauración devolvió el estado ya estropeado.
+
+⚠️ Conviene repetir el simulacro de restauración una vez por temporada: una copia
+que nunca se ha probado a restaurar no es una copia de seguridad, es un fichero.
+Además, GitHub desactiva las tareas programadas si el repositorio pasa 60 días sin
+actividad; si eso ocurre, basta con volver a activarla desde *Actions*.

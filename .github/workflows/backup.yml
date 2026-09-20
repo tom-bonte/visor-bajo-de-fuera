@@ -1,0 +1,29 @@
+name: copia de seguridad diaria
+
+on:
+  schedule:
+    # 03:15 UTC = 05:15 en España (verano) / 04:15 (invierno). Nadie reserva a esa hora.
+    - cron: '15 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Exportar bdf_days y bdf_history_logs
+        run: node scripts/backup.js
+
+      # No se guarda en el repositorio: se sube como artefacto. Así no se
+      # dispara un despliegue de Netlify cada noche ni crece el repositorio.
+      - name: Guardar la copia como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdf-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 90
