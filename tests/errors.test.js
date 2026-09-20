@@ -140,4 +140,16 @@ check('ya no quedan console.error sueltos en firebase-service.js',
     (serviceJs.match(/console\.error/g) || []).length, 1); // el único que queda está DENTRO de reportFailure
 ok('el modo sin conexión también guarda el fichero', swJs.includes('error-reporter.js'));
 
+// -------------------------------------------------------------------------
+section('La app no se queda con código viejo');
+
+ok('el código propio se pide siempre a la red', /esCodigoPropio[\s\S]{0,200}fetch\(request\)/.test(swJs));
+ok('con la caché sólo como paracaídas', /esCodigoPropio[\s\S]{0,900}catch\(\(\) => caches\.match\(request\)\)/.test(swJs));
+
+const versionCache = /CACHE_NAME = '([^']+)'/.exec(swJs)[1];
+const versiones = [...indexHtml.matchAll(/src="[^"]+\.js\?v=([\d.]+)"/g)].map(m => m[1]);
+check('todos los scripts llevan la misma versión', [...new Set(versiones)].length, 1);
+ok('y esa versión coincide con la de la caché',
+    versionCache.endsWith(versiones[0]));
+
 process.exit(report('ALARMA DE FALLOS'));

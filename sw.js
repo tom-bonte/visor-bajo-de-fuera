@@ -1,5 +1,5 @@
 // Service Worker para Visor Bajo de Fuera (PWA & Offline App Shell)
-const CACHE_NAME = 'bdf-cache-v7.1';
+const CACHE_NAME = 'bdf-cache-v7.2';
 
 const PRECACHE_ASSETS = [
     './',
@@ -79,7 +79,33 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Stale-While-Revalidate para recursos estáticos locales y CDNs
+    // El código de la app (JS y CSS propios) va SIEMPRE a la red primero, con la
+    // caché sólo como paracaídas si no hay cobertura.
+    //
+    // Antes era al revés ("stale-while-revalidate"): se servía la copia guardada
+    // y la nueva se descargaba para la PRÓXIMA vez. Eso significa que tras cada
+    // despliegue la primera carga seguía ejecutando el código viejo, y peor aún,
+    // podía mezclar ficheros nuevos con ficheros viejos, con errores imposibles
+    // de entender. Para una app que se actualiza a diario, eso no vale.
+    const esCodigoPropio = url.origin === self.location.origin &&
+        /\.(js|css|html)$/.test(url.pathname);
+
+    if (esCodigoPropio) {
+        event.respondWith(
+            fetch(request)
+                .then((networkResponse) => {
+                    if (networkResponse && networkResponse.status === 200 && request.method === 'GET') {
+                        const responseClone = networkResponse.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
+                    }
+                    return networkResponse;
+                })
+                .catch(() => caches.match(request))
+        );
+        return;
+    }
+
+    // Stale-While-Revalidate para imágenes, fuentes y CDNs: eso sí puede ser viejo.
     event.respondWith(
         caches.match(request).then((cachedResponse) => {
             const fetchPromise = fetch(request)
