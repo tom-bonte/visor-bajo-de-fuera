@@ -210,4 +210,12 @@ ok('el historial de las solicitudes ya no se duplica desde el navegador', !/logB
 ok('el navegador ya no caduca solicitudes ajenas', !/status: 'expired'/.test(servicioSrc));
 ok('en local se avisa en vez de fallar raro', /servidor de pruebas local/.test(servicioSrc));
 
+// Regresión del 20/09/2026: al dejar de mandar el centro al servidor (que era
+// lo correcto), el aviso de WhatsApp se quedó sin centro y anunciaba la
+// modificación a nombre de "Centro desconocido".
+ok('el aviso de modificación nombra al centro de la salida',
+    /safeCenter\(newCenterCode \|\| centerCode\)/.test(appSrc));
+ok('y ningún aviso se construye con un centro que puede ser nulo',
+    !/safeCenter\(newCenterCode\)/.test(appSrc));
+
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));

@@ -729,7 +729,11 @@ function confirmEditSalida() {
     // centro ninguno: mandar el suyo propio hacía que el servidor lo tomase por
     // un intento de cambio y rechazase una edición legítima.
     const newCenterCode = currentUserKey === 'admin' ? getEl('edit-salida-center').value : null;
-    const centerInfo = safeCenter(newCenterCode);
+    // El aviso de WhatsApp lleva el nombre del centro de la salida. Ojo:
+    // newCenterCode sólo existe cuando el admin la está reasignando, así que
+    // para un centro normal hay que usar el suyo. Al no hacerlo, el mensaje
+    // decía "Centro desconocido" en vez de "Mangamar".
+    const centerInfo = safeCenter(newCenterCode || centerCode);
     const dObj = parseDateT00(dateStr);
 
     hideEl('edit-salida-modal');
