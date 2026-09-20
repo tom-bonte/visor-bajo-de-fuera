@@ -286,7 +286,128 @@ async function executePrintCSV() {
 }
 
 /**
- * Genera y descarga un documento PDF vectorial de alta calidad con el cuadrante diario.
+ * Dibuja un mes completo como calendario, igual que se ve en la app: una
+ * columna por día de la semana, una fila por semana, y dentro de cada día las
+ * pastillas de color de cada escuela con sus plazas.
+ *
+ * Antes el PDF era una lista de días uno detrás de otro. Se leía bien en una
+ * pantalla, pero el papel que se cuelga en el pantalán tiene que verse de un
+ * vistazo: dónde hay hueco esta semana, quién sale el sábado.
+ *
+ * @param {Object} doc - documento jsPDF (horizontal)
+ * @param {number} year
+ * @param {number} month - 0 a 11
+ * @param {Object} daysByDate - { 'AAAA-MM-DD': datos del día }
+ * @param {string} centerVal - 'all' o el código de un centro
+ * @param {Object} L - medidas de la página
+ */
+function drawMonthGrid(doc, year, month, daysByDate, centerVal, L) {
+    const primerDia = new Date(year, month, 1);
+    const diasDelMes = new Date(year, month + 1, 0).getDate();
+    // La semana empieza en lunes, como en la app (getDay() da 0 al domingo).
+    const hueco = (primerDia.getDay() + 6) % 7;
+    const semanas = Math.ceil((hueco + diasDelMes) / 7);
+
+    const anchoCol = L.contentWidth / 7;
+    const altoFila = (L.gridBottom - L.gridTop - L.headerRowH) / semanas;
+
+    // Cabecera de los días de la semana
+    const diasSemana = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO', 'DOMINGO'];
+    doc.setFillColor('#0f172a');
+    doc.rect(L.marginX, L.gridTop, L.contentWidth, L.headerRowH, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor('#ffffff');
+    diasSemana.forEach((d, i) => {
+        doc.text(d, L.marginX + anchoCol * i + anchoCol / 2, L.gridTop + L.headerRowH - 4.5, { align: 'center' });
+    });
+
+    let y = L.gridTop + L.headerRowH;
+
+    for (let semana = 0; semana < semanas; semana++) {
+        for (let col = 0; col < 7; col++) {
+            const numeroDia = semana * 7 + col - hueco + 1;
+            const x = L.marginX + anchoCol * col;
+            const dentroDelMes = numeroDia >= 1 && numeroDia <= diasDelMes;
+            const finDeSemana = col >= 5;
+
+            // Fondo de la celda
+            doc.setFillColor(dentroDelMes ? (finDeSemana ? '#f8fafc' : '#ffffff') : '#f1f5f9');
+            doc.setDrawColor('#cbd5e1');
+            doc.setLineWidth(0.5);
+            doc.rect(x, y, anchoCol, altoFila, 'FD');
+
+            if (!dentroDelMes) continue;
+
+            const fecha = `${year}-${String(month + 1).padStart(2, '0')}-${String(numeroDia).padStart(2, '0')}`;
+            const datos = daysByDate[fecha] || null;
+            const cupo = getDayQuota(fecha, datos);
+
+            // Número del día
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(finDeSemana ? '#0369a1' : '#0f172a');
+            doc.text(String(numeroDia), x + 5, y + 10);
+
+            // Ocupación del día: se cuenta SIEMPRE entera, aunque se esté
+            // imprimiendo el papel de una sola escuela. Lo que importa al
+            // mirar el cuadrante es cuántas plazas quedan en el barco.
+            let ocupadas = 0;
+            const pastillas = [];
+            Object.keys(CENTERS).forEach(code => {
+                const bal = getCenterBalance(code, datos);
+                const plazas = bal.effectiveSlots || 0;
+                if (plazas <= 0) return;
+                ocupadas += plazas;
+                if (centerVal === 'all' || centerVal === code) pastillas.push({ code, plazas });
+            });
+
+            if (ocupadas > 0 || cupo > 0) {
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(6.5);
+                doc.setTextColor(ocupadas >= cupo ? '#dc2626' : '#64748b');
+                doc.text(`${ocupadas}/${cupo} pl.`, x + anchoCol - 5, y + 9.5, { align: 'right' });
+            }
+
+            // Pastillas de cada escuela, de más plazas a menos
+            pastillas.sort((a, b) => b.plazas - a.plazas);
+
+            const altoPastilla = 10;
+            const separacion = 1.5;
+            const disponible = altoFila - 15;
+            const caben = Math.max(0, Math.floor(disponible / (altoPastilla + separacion)));
+
+            pastillas.slice(0, caben).forEach((p, idx) => {
+                const py = y + 14 + idx * (altoPastilla + separacion);
+                const estilo = PDF_CENTER_STYLES[p.code] || { bg: '#64748b', text: '#ffffff' };
+                const info = safeCenter(p.code);
+
+                doc.setFillColor(estilo.bg);
+                doc.roundedRect(x + 3, py, anchoCol - 6, altoPastilla, 2, 2, 'F');
+
+                doc.setTextColor(estilo.text);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(6.5);
+                const nombre = doc.splitTextToSize(info.name, anchoCol - 24)[0];
+                doc.text(nombre, x + 6, py + 7);
+                doc.text(String(p.plazas), x + anchoCol - 6, py + 7, { align: 'right' });
+            });
+
+            // Si no caben todas, se dice cuántas faltan en vez de recortar en silencio.
+            if (pastillas.length > caben) {
+                doc.setFont('helvetica', 'italic');
+                doc.setFontSize(6);
+                doc.setTextColor('#64748b');
+                doc.text(`+${pastillas.length - caben} más`, x + 5, y + altoFila - 3);
+            }
+        }
+        y += altoFila;
+    }
+}
+
+/**
+ * PDF del cuadrante: un mes por página, en horizontal, con el mismo aspecto
+ * que el calendario de la app.
  */
 async function executePrintPDF() {
     const monthVal = getEl('print-month')?.value || 'all';
@@ -297,20 +418,29 @@ async function executePrintPDF() {
 
     const days = await getExportDaysData(monthVal);
 
-    // Filtrar días que contengan asignaciones para el filtro
-    const filteredDays = days.filter(day => {
-        if (centerVal === 'all') {
-            return Object.keys(CENTERS).some(c => {
-                const bal = getCenterBalance(c, day);
-                return bal.effectiveSlots > 0 || bal.initialSlots > 0;
-            });
-        } else {
-            const bal = getCenterBalance(centerVal, day);
-            return bal.effectiveSlots > 0 || bal.initialSlots > 0;
-        }
+    const daysByDate = {};
+    days.forEach(d => { if (d && d.date) daysByDate[d.date] = d; });
+
+    // Meses que se van a imprimir: el elegido, o todos los que tengan algo.
+    let meses;
+    if (monthVal !== 'all') {
+        meses = [parseInt(monthVal, 10)];
+    } else {
+        const conDatos = new Set();
+        days.forEach(d => {
+            const tieneAlgo = Object.keys(CENTERS).some(c => (getCenterBalance(c, d).effectiveSlots || 0) > 0);
+            if (tieneAlgo) conDatos.add(parseInt(d.date.split('-')[1], 10) - 1);
+        });
+        meses = [...conDatos].sort((a, b) => a - b);
+    }
+
+    // Con un centro concreto, comprobar que ese centro tiene algo que imprimir.
+    const hayDatos = days.some(d => {
+        if (centerVal === 'all') return Object.keys(CENTERS).some(c => (getCenterBalance(c, d).effectiveSlots || 0) > 0);
+        return (getCenterBalance(centerVal, d).effectiveSlots || 0) > 0;
     });
 
-    if (filteredDays.length === 0) {
+    if (meses.length === 0 || !hayDatos) {
         showToast('Sin Datos', 'No hay registros para los filtros seleccionados.', true);
         return;
     }
@@ -322,186 +452,67 @@ async function executePrintPDF() {
             }
 
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'pt', 'a4');
-            const pageWidth = 595.28;
-            const pageHeight = 841.89;
-            const marginX = 36;
-            const contentWidth = pageWidth - (marginX * 2); // 523.28 pt
+            // Horizontal: un mes de siete columnas no cabe en vertical.
+            const doc = new jsPDF('l', 'pt', 'a4');
 
-            let currentY = 36;
-            let pageNumber = 1;
+            const L = {
+                pageWidth: 841.89,
+                pageHeight: 595.28,
+                marginX: 28,
+                contentWidth: 841.89 - 56,
+                gridTop: 74,
+                gridBottom: 595.28 - 30,
+                headerRowH: 16
+            };
 
-            const renderDocHeader = () => {
-                doc.setFillColor(15, 23, 42); // slate-900
-                doc.rect(marginX, currentY, contentWidth, 42, 'F');
+            const dibujarCabecera = (month) => {
+                doc.setFillColor('#0f172a');
+                doc.rect(L.marginX, 24, L.contentWidth, 40, 'F');
 
-                doc.setTextColor(255, 255, 255);
+                doc.setTextColor('#ffffff');
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(13);
-                doc.text("CABO DE PALOS · RESERVA MARINA", marginX + 14, currentY + 18);
+                doc.text("CABO DE PALOS · RESERVA MARINA", L.marginX + 14, 42);
 
-                doc.setFontSize(9);
+                doc.setFontSize(8.5);
                 doc.setFont('helvetica', 'normal');
-                doc.setTextColor(148, 163, 184); // slate-400
-                doc.text(`PLANIFICACIÓN OFICIAL BAJO DE FUERA ${currentYear}`, marginX + 14, currentY + 32);
+                doc.setTextColor('#94a3b8');
+                doc.text("PLANIFICACIÓN OFICIAL BAJO DE FUERA", L.marginX + 14, 55);
 
-                const cText = centerVal === 'all' ? 'TODOS LOS CENTROS' : (CENTERS[centerVal]?.name || centerVal).toUpperCase();
-                const mText = monthVal === 'all' ? `TEMPORADA ${currentYear}` : `${MONTHS_ES[parseInt(monthVal, 10)]} ${currentYear}`;
-                doc.setFontSize(8);
                 doc.setFont('helvetica', 'bold');
-                doc.setTextColor(56, 189, 248); // sky-400
-                doc.text(`${cText} · ${mText}`, marginX + contentWidth - 14, currentY + 25, { align: 'right' });
+                doc.setFontSize(16);
+                doc.setTextColor('#ffffff');
+                doc.text(`${MONTHS_ES[month].toUpperCase()} ${currentYear}`,
+                    L.marginX + L.contentWidth / 2, 48, { align: 'center' });
 
-                currentY += 52;
+                const cText = centerVal === 'all' ? 'TODOS LOS CENTROS' : (safeCenter(centerVal).name).toUpperCase();
+                doc.setFontSize(8);
+                doc.setTextColor('#38bdf8');
+                doc.text(cText, L.marginX + L.contentWidth - 14, 48, { align: 'right' });
             };
 
-            const renderFooter = (page) => {
+            const dibujarPie = (pagina, total) => {
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(7.5);
-                doc.setTextColor(148, 163, 184);
-                doc.text("Visor Bajo de Fuera · Sistema de Gestión de Plazas", marginX, pageHeight - 20);
-                doc.text(`Página ${page}`, marginX + contentWidth, pageHeight - 20, { align: 'right' });
+                doc.setTextColor('#94a3b8');
+                doc.text("Visor Bajo de Fuera · Sistema de Gestión de Plazas", L.marginX, L.pageHeight - 14);
+                doc.text(`Página ${pagina} de ${total}`, L.marginX + L.contentWidth, L.pageHeight - 14, { align: 'right' });
             };
 
-            renderDocHeader();
+            meses.forEach((month, idx) => {
+                if (idx > 0) doc.addPage('a4', 'l');
+                dibujarCabecera(month);
+                drawMonthGrid(doc, currentYear, month, daysByDate, centerVal, L);
+                dibujarPie(idx + 1, meses.length);
+            });
 
-            for (let i = 0; i < filteredDays.length; i++) {
-                const day = filteredDays[i];
-                const dObj = parseDateT00(day.date);
-                const dayName = DAYS_ES[dObj.getDay()];
-                const dateTitle = `${dayName}, ${dObj.getDate()} DE ${MONTHS_ES[dObj.getMonth()]} ${dObj.getFullYear()}`;
-
-                const centerEntries = [];
-                let totalDayEffective = 0;
-
-                const targetCodes = centerVal === 'all' ? Object.keys(CENTERS) : [centerVal];
-                targetCodes.forEach(code => {
-                    const bal = getCenterBalance(code, day);
-                    if (bal.effectiveSlots > 0 || bal.initialSlots > 0) {
-                        centerEntries.push({ code, bal });
-                        totalDayEffective += bal.effectiveSlots;
-                    }
-                });
-
-                if (centerEntries.length === 0) continue;
-
-                centerEntries.sort((a, b) => b.bal.effectiveSlots - a.bal.effectiveSlots);
-
-                // Cálculo de altura del bloque diario
-                const blockHeight = 20 + 14 + (centerEntries.length * 16) + 12;
-
-                if (currentY + blockHeight > pageHeight - 36) {
-                    renderFooter(pageNumber);
-                    doc.addPage();
-                    pageNumber++;
-                    currentY = 36;
-                    renderDocHeader();
-                }
-
-                // Marco exterior redondeado
-                doc.setDrawColor(226, 232, 240);
-                doc.setLineWidth(0.8);
-                doc.setFillColor(255, 255, 255);
-                doc.roundedRect(marginX, currentY, contentWidth, blockHeight - 4, 3, 3, 'FD');
-
-                // Cabecera del día
-                doc.setFillColor(241, 245, 249);
-                doc.roundedRect(marginX, currentY, contentWidth, 20, 3, 3, 'F');
-                doc.rect(marginX, currentY + 10, contentWidth, 10, 'F');
-                doc.setDrawColor(226, 232, 240);
-                doc.line(marginX, currentY + 20, marginX + contentWidth, currentY + 20);
-
-                doc.setTextColor(15, 23, 42);
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(8.5);
-                doc.text(dateTitle.toUpperCase(), marginX + 10, currentY + 13);
-
-                const totalCap = getDayQuota(day.date, day);
-                doc.setFontSize(8);
-                doc.setTextColor(2, 132, 199);
-                doc.text(`TOTAL: ${totalDayEffective} / ${totalCap} PLAZAS`, marginX + contentWidth - 10, currentY + 13, { align: 'right' });
-
-                let tableY = currentY + 20;
-
-                // Cabecera de columnas
-                doc.setFillColor(248, 250, 252);
-                doc.rect(marginX, tableY, contentWidth, 14, 'F');
-                doc.line(marginX, tableY + 14, marginX + contentWidth, tableY + 14);
-
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(7);
-                doc.setTextColor(100, 116, 139);
-                doc.text("CENTRO DE BUCEO", marginX + 22, tableY + 10);
-                doc.text("PLAZAS BASE", marginX + 175, tableY + 10);
-                doc.text("MOVIMIENTOS / CESIONES", marginX + 265, tableY + 10);
-                doc.text("PLAZAS EFECTIVAS", marginX + contentWidth - 10, tableY + 10, { align: 'right' });
-
-                tableY += 14;
-
-                // Filas de centros
-                centerEntries.forEach((entry, rIdx) => {
-                    const { code, bal } = entry;
-                    const cInfo = safeCenter(code);
-                    const pdfStyle = PDF_CENTER_STYLES[code] || { bg: '#64748b', text: '#ffffff' };
-
-                    if (rIdx % 2 === 1) {
-                        doc.setFillColor(248, 250, 252);
-                        doc.rect(marginX, tableY, contentWidth, 16, 'F');
-                    }
-                    doc.setDrawColor(241, 245, 249);
-                    doc.line(marginX, tableY + 16, marginX + contentWidth, tableY + 16);
-
-                    // Pastilla de color del centro
-                    doc.setFillColor(pdfStyle.bg);
-                    doc.roundedRect(marginX + 8, tableY + 3.5, 9, 9, 2, 2, 'F');
-
-                    // Nombre del centro
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(7.5);
-                    doc.setTextColor(30, 41, 59);
-                    doc.text(cInfo.name, marginX + 22, tableY + 11);
-
-                    // Plazas iniciales
-                    doc.setFont('helvetica', 'normal');
-                    doc.setFontSize(7.5);
-                    doc.setTextColor(71, 85, 105);
-                    doc.text(`${bal.initialSlots} plazas`, marginX + 175, tableY + 11);
-
-                    // Movimientos
-                    let movText = "-";
-                    const notes = [];
-                    if (bal.transferredOut > 0) notes.push(`-${bal.transferredOut} cedidas`);
-                    if (bal.transferredIn > 0) notes.push(`+${bal.transferredIn} recibidas`);
-                    if (bal.releasedToPool > 0) notes.push(`-${bal.releasedToPool} al pool`);
-                    if (bal.claimedFromPool > 0) notes.push(`+${bal.claimedFromPool} del pool`);
-                    if (notes.length > 0) movText = notes.join(', ');
-
-                    doc.setFont('helvetica', 'normal');
-                    doc.setFontSize(7);
-                    doc.setTextColor(movText === '-' ? 148 : 71, movText === '-' ? 163 : 85, movText === '-' ? 184 : 105);
-                    doc.text(movText, marginX + 265, tableY + 11);
-
-                    // Plazas finales
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(8);
-                    doc.setTextColor(15, 23, 42);
-                    doc.text(`${bal.effectiveSlots} plazas`, marginX + contentWidth - 10, tableY + 11, { align: 'right' });
-
-                    tableY += 16;
-                });
-
-                currentY += blockHeight;
-            }
-
-            renderFooter(pageNumber);
-
-            const centerFile = centerVal === 'all' ? 'Todos' : (CENTERS[centerVal]?.name || centerVal);
+            const centerFile = centerVal === 'all' ? 'Todos' : (safeCenter(centerVal).name);
             const monthFile = monthVal === 'all' ? String(currentYear) : `${MONTHS_SHORT[parseInt(monthVal, 10)]}_${currentYear}`;
-            doc.save(`Planificacion_BajoDeFuera_${centerFile}_${monthFile}.pdf`);
+            doc.save(`Cuadrante_BajoDeFuera_${centerFile}_${monthFile}.pdf`);
 
             showToast('PDF Descargado', 'Documento PDF generado y descargado correctamente.');
         } catch (err) {
-            console.error("Error al generar PDF vectorial:", err);
+            reportFailure(err, "Error al generar el PDF del cuadrante");
             showToast('Error', friendlyError(err, 'generar el PDF'), true);
         }
     }, 120);
