@@ -162,12 +162,156 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 3. APP MANGAMAR (comportamiento IDÉNTICO al actual, sin cambios)
+    // 3. APP MANGAMAR
     // =========================================================================
-    // PENDIENTE: restringir cuando se confirme su modelo de autenticación
-    // (personal = solo lectura, gerencia = escritura).
-    match /{col}/{doc=**} {
-      allow read, write: if col.matches('^mangamar_.*');
+    // Quién entra en mangamar_* (y nadie más):
+    //
+    //   a) DISPOSITIVOS APROBADOS (lo normal desde el 22/09/2026). Los móviles
+    //      y PCs del personal no escriben nada: cada navegador que ya ha entrado
+    //      como personal pide solo un "pase de dispositivo" a
+    //      netlify/functions/device.js. El pase es un token 'custom' de Firebase
+    //      con uid 'dev_<id>' y la marca mgDevice: true, firmado con la cuenta
+    //      de servicio: sólo el servidor puede fabricarlo. Además, el servidor
+    //      guarda la ficha mangamar_devices/{uid}, y aquí se mira EN CADA
+    //      PETICIÓN que esa ficha exista y diga status == 'approved'. Un
+    //      dispositivo 'pending' o 'revoked', uno sin ficha, o un token 'custom'
+    //      sin la marca, NO entra. Quitar un dispositivo corta su acceso al
+    //      momento, aunque su token siga vivo hasta una hora.
+    //
+    //   b) Las dos cuentas EXACTAS de email y contraseña, como hasta ahora:
+    //        - mangamar@visor.local  la cuenta de la tienda
+    //        - admin@visor.local     la cuenta de Tom
+    //      Nunca "cualquiera con sesión" ni "cualquier @visor.local": las otras
+    //      escuelas del Visor también tienen cuentas @visor.local. Un token
+    //      'custom' o anónimo que traiga el mismo email NO vale.
+    //
+    // Cada colección va por su nombre exacto. Una colección mangamar_ nueva, o
+    // una subcolección no listada aquí, queda DENEGADA.
+    //
+    // Fuera de estas reglas (usan cuenta de servicio o IAM, no pasan por aquí):
+    //   - el portal de clientes (netlify/functions/portal.js), que es el único
+    //     que escribe mangamar_portal_throttle y mangamar_portal_logs;
+    //   - el registro de dispositivos (netlify/functions/device.js), que es el
+    //     único que crea fichas en mangamar_devices y el único que escribe
+    //     secretHash, role, ua, createdAt, lastSeen y approvedBy;
+    //   - Make.com, que crea los documentos de mangamar_inbox;
+    //   - la copia de seguridad nocturna y la restauración (Admin SDK).
+    // Por eso aquí no hay NINGÚN acceso sin sesión a mangamar_*.
+
+    function mgIsPasswordUser() {
+      return request.auth != null
+          && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+
+    function mgIsAdmin() {
+      return mgIsPasswordUser()
+          && request.auth.token.email == 'admin@visor.local';
+    }
+
+    // exists() antes de get(): si no hay ficha, deniega limpio en vez de dar
+    // un error de evaluación.
+    function mgIsDevice() {
+      return request.auth != null
+          && request.auth.token.firebase.sign_in_provider == 'custom'
+          && request.auth.token.get('mgDevice', false) == true
+          && exists(/databases/$(database)/documents/mangamar_devices/$(request.auth.uid))
+          && get(/databases/$(database)/documents/mangamar_devices/$(request.auth.uid)).data.get('status', '') == 'approved';
+    }
+
+    function mgIsStaff() {
+      return mgIsDevice()
+          || (mgIsPasswordUser()
+              && request.auth.token.email in ['mangamar@visor.local', 'admin@visor.local']);
+    }
+
+    // Salidas por mes (YYYY-MM) y los documentos fijos staff, reg_maintenance,
+    // tank_inventory y tank_actas. La app nunca borra un documento entero
+    // (sólo campos), así que borrar el documento queda para Tom.
+    match /mangamar_monthly/{mgDocId} {
+      allow read, create, update: if mgIsStaff();
+      allow delete: if mgIsAdmin();
+    }
+
+    // Fichas de clientes (el id es el DNI, 'VENTA DIRECTA' o 'temp_...') y su
+    // historial. La app sí borra fichas e historial (cambio de DNI, borrar
+    // cliente, mover buceadores), así que la tienda puede borrar.
+    match /mangamar_customers/{mgCustomerId} {
+      allow read, write: if mgIsStaff();
+
+      match /history/{mgHistoryId} {
+        allow read, write: if mgIsStaff();
+      }
+    }
+
+    // Consultas collectionGroup('history'): certificados pendientes y
+    // procesados, deudas, contabilidad y la herramienta de borrado.
+    // SÓLO LECTURA. Por cómo funciona Firestore, esto se aplica a cualquier
+    // subcolección 'history' del proyecto (hoy sólo existe bajo
+    // mangamar_customers). No añadir NUNCA escritura aquí: la escritura va por
+    // la ruta completa de arriba.
+    match /{mgPath=**}/history/{mgHistoryId} {
+      allow read: if mgIsStaff();
+    }
+
+    // Directorio: master_list, master_list_N (el CRM entero) y settings.
+    // settings incluye adminPassword: ya no está reservado a Tom, porque
+    // ningún dispositivo entra como admin y "Cambiar contraseña" tiene que
+    // seguir funcionando desde los dispositivos del personal.
+    // La app nunca borra estos documentos: borrarlos queda para Tom.
+    match /mangamar_directory/{mgDocId} {
+      allow read, create, update: if mgIsStaff();
+      allow delete: if mgIsAdmin();
+    }
+
+    match /mangamar_groups/{mgDocId} {
+      allow read, write: if mgIsStaff();
+    }
+
+    // Altas de Jotform. Las crea Make.com (IAM, fuera de estas reglas); la
+    // tienda las lee, las pasa al directorio y las borra.
+    match /mangamar_inbox/{mgDocId} {
+      allow read, delete: if mgIsStaff();
+    }
+
+    // Registro de accesos al portal. Lo escribe sólo el servidor; la tienda
+    // lo consulta.
+    match /mangamar_portal_logs/{mgDocId} {
+      allow read: if mgIsStaff();
+    }
+
+    // mangamar_portal_throttle: SIN regla a propósito. Sólo el servidor.
+
+    // Registro de dispositivos ("Dispositivos conectados"). Lo crea y lo
+    // mantiene SÓLO el servidor (netlify/functions/device.js): el alta, el
+    // aprobar y el quitar (que además corta la sesión de Firebase del quitado).
+    // Desde el navegador sólo se puede leer la lista, y sólo con acceso.
+    match /mangamar_devices/{mgDeviceUid} {
+      allow read: if mgIsStaff();
+      allow create, update, delete: if false;
+    }
+
+    match /mangamar_bonos/{mgDocId} {
+      allow read, write: if mgIsStaff();
+    }
+
+    match /mangamar_contacts/{mgDocId} {
+      allow read, write: if mgIsStaff();
+    }
+
+    match /mangamar_projects/{mgDocId} {
+      allow read, write: if mgIsStaff();
+    }
+
+    // pricing (tarifas) y device_checkins (cada dispositivo de la tienda
+    // anota con merge { [deviceId]: {email, build, at, ua} }).
+    // La app nunca borra estos documentos: borrarlos queda para Tom.
+    match /mangamar_settings/{mgDocId} {
+      allow read, create, update: if mgIsStaff();
+      allow delete: if mgIsAdmin();
+    }
+
+    match /mangamar_staff_schedule/{mgDocId} {
+      allow read, write: if mgIsStaff();
     }
 
     // Cualquier colección no contemplada arriba queda denegada por defecto.
