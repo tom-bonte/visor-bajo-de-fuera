@@ -136,6 +136,53 @@
     }
 
     /**
+     * Avisos del almacenamiento del navegador, NO fallos de la app.
+     *
+     * Los dos casos reales, el 28/09/2026, del mismo iPhone con Safari:
+     *   "UnknownError: Database deleted by request of the user"
+     *   "UnknownError: An internal error was encountered in the Indexed Database server"
+     *
+     * Suenan a catástrofe y no lo son. La "database" es la copia del calendario
+     * que la app guarda DENTRO del teléfono para funcionar sin cobertura. Safari
+     * la borra por su cuenta cuando se limpian los datos del sitio, se navega en
+     * privado, escasea el espacio o pasa una semana sin entrar; y el
+     * almacenamiento de Safari en iOS falla de vez en cuando por sus propios
+     * motivos. Cloud Firestore ni se entera: el teléfono vuelve a descargar el
+     * calendario y sigue. De hecho estos sucesos llegan marcados como
+     * 'handled: yes', es decir, la app no se rompió.
+     *
+     * Se marcan como 'warning' y se agrupan aparte. NO se descartan: uno suelto
+     * es Safari siendo Safari; doscientos en un día significaría que el modo sin
+     * conexión está roto de verdad, y eso sí hay que verlo.
+     */
+    var AVISOS_DE_ALMACENAMIENTO = [
+        /database deleted by request of the user/i,
+        /internal error was encountered in the indexed database server/i,
+        /the operation failed for reasons unrelated to the database itself/i,
+        /a mutation operation was attempted on a database that did not allow mutations/i,
+        /an attempt was made to open a database using a lower version/i,
+        /connection to indexed database server lost/i,
+        /quota.?exceeded/i
+    ];
+
+    function esAvisoDeAlmacenamiento(event) {
+        var mensajes = [];
+        try {
+            if (event.message) mensajes.push(String(event.message));
+            var valores = (event.exception && event.exception.values) || [];
+            valores.forEach(function (v) {
+                if (!v) return;
+                if (v.value) mensajes.push(String(v.value));
+                if (v.type) mensajes.push(String(v.type) + ': ' + String(v.value || ''));
+            });
+        } catch (e) { return false; }
+
+        return mensajes.some(function (m) {
+            return AVISOS_DE_ALMACENAMIENTO.some(function (patron) { return patron.test(m); });
+        });
+    }
+
+    /**
      * Quita de los informes cualquier cosa que no nos haga falta. Aquí no se
      * manejan datos personales de buceadores, pero una URL puede llevar la
      * sesión pegada y un correo identifica a una escuela: fuera los dos.
@@ -146,6 +193,16 @@
                 event.request.url = String(event.request.url).split('?')[0];
             }
             if (event.user) delete event.user;
+
+            if (esAvisoDeAlmacenamiento(event)) {
+                event.level = 'warning';
+                // Huella propia: todos estos avisos caen en un mismo grupo en
+                // vez de mezclarse con los fallos de verdad.
+                event.fingerprint = ['almacenamiento-del-navegador'];
+                event.tags = event.tags || {};
+                event.tags.causa = 'limpieza-del-navegador';
+            }
+
             var texto = JSON.stringify(event);
             if (/[\w.+-]+@[\w-]+\.[\w.]+/.test(texto)) {
                 event = JSON.parse(texto.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[correo]'));

@@ -152,4 +152,44 @@ check('todos los scripts llevan la misma versión', [...new Set(versiones)].leng
 ok('y esa versión coincide con la de la caché',
     versionCache.endsWith(versiones[0]));
 
+// -------------------------------------------------------------------------
+section('Los avisos del navegador no se confunden con fallos de la app');
+
+const limpiador2 = loadReporter().api;
+const avisoAlmacen = m => limpiador2.scrub({ exception: { values: [{ type: 'UnknownError', value: m }] } });
+
+// Los dos que llegaron de verdad desde un iPhone el 28/09/2026.
+const borrada = avisoAlmacen('Database deleted by request of the user');
+check('"database deleted" pasa a aviso', borrada.level, 'warning');
+check('y se agrupa aparte', borrada.fingerprint, ['almacenamiento-del-navegador']);
+check('con su causa etiquetada', borrada.tags.causa, 'limpieza-del-navegador');
+
+const interno = avisoAlmacen('An internal error was encountered in the Indexed Database server');
+check('el fallo interno de IndexedDB también', interno.level, 'warning');
+check('y cae en el mismo grupo', interno.fingerprint, ['almacenamiento-del-navegador']);
+
+ok('sin espacio en el teléfono, también', avisoAlmacen('QuotaExceededError: quota exceeded').level === 'warning');
+
+// Lo que NO debe tocarse: cualquier fallo real de la app.
+const deVerdad = limpiador2.scrub({ exception: { values: [{ type: 'TypeError', value: "Cannot read properties of null (reading 'plazas')" }] } });
+check('un fallo de la app sigue siendo error', deVerdad.level, undefined);
+ok('y no se le pone huella propia', !deVerdad.fingerprint);
+
+const permisos2 = limpiador2.scrub({ exception: { values: [{ type: 'FirebaseError', value: 'Missing or insufficient permissions.' }] } });
+check('un permiso denegado sigue siendo error', permisos2.level, undefined);
+
+// La coincidencia tiene que ser estrecha: nombrar "database" no basta.
+const menciona = limpiador2.scrub({ exception: { values: [{ type: 'Error', value: 'No se pudo escribir en la database de plazas' }] } });
+check('mencionar "database" no degrada nada', menciona.level, undefined);
+
+// Ningún aviso se descarta: doscientos en un día sí querríamos verlos.
+ok('los avisos se siguen enviando', !!borrada && !!interno);
+
+// También se reconoce si llega como message suelto, no como excepción.
+check('mensaje suelto, mismo trato',
+    limpiador2.scrub({ message: 'UnknownError: Database deleted by request of the user' }).level, 'warning');
+
+// Y un evento raro no debe tumbar el saneado.
+ok('un evento sin exception ni message no revienta', limpiador2.scrub({ tags: {} }).level === undefined);
+
 process.exit(report('ALARMA DE FALLOS'));
