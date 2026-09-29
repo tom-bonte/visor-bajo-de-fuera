@@ -186,7 +186,7 @@ async function opAddSalida(quien, body) {
 
         return [
             admin.writeOp(BDF_COLLECTIONS.DAYS, dateStr, dayPayload(dateStr, revision.cap, salidas), dia.updateTime),
-            historyOp('add_salida', quien.userKey, { date: dateStr, center: centro.code, pax: pax })
+            historyOp('add_salida', quien.userKey, { date: dateStr, center: centro.code, slots: pax, pax: pax })
         ];
     });
 
@@ -224,7 +224,8 @@ async function opDeleteSalida(quien, body) {
         return [
             admin.writeOp(BDF_COLLECTIONS.DAYS, dateStr, dayPayload(dateStr, revision.cap, tras.salidas), dia.updateTime),
             historyOp('delete_salida', quien.userKey, {
-                date: dateStr, center: normCenter(objetivo.centerCode), pax: Number(objetivo.plazas) || 0
+                date: dateStr, center: normCenter(objetivo.centerCode),
+                slots: Number(objetivo.plazas) || 0, pax: Number(objetivo.plazas) || 0
             })
         ];
     });
@@ -290,7 +291,8 @@ async function opEditSalida(quien, body) {
         return [
             admin.writeOp(BDF_COLLECTIONS.DAYS, dateStr, dayPayload(dateStr, revision.cap, salidas), dia.updateTime),
             historyOp('edit_salida', quien.userKey, {
-                date: dateStr, center: nuevoCentro || normCenter(objetivo.centerCode), from: antes, to: nuevas
+                date: dateStr, center: nuevoCentro || normCenter(objetivo.centerCode),
+                slots: nuevas, oldSlots: antes
             })
         ];
     });
@@ -352,7 +354,8 @@ async function opMoveSalida(quien, body) {
             admin.writeOp(BDF_COLLECTIONS.DAYS, sourceDate, dayPayload(sourceDate, revOrigen.cap, salidasOrigen), origen.updateTime),
             admin.writeOp(BDF_COLLECTIONS.DAYS, targetDate, dayPayload(targetDate, revDestino.cap, salidasDestino), destino.updateTime),
             historyOp('move_salida', quien.userKey, {
-                from: sourceDate, to: targetDate, center: normCenter(objetivo.centerCode), pax: pax
+                from: sourceDate, to: targetDate, center: normCenter(objetivo.centerCode),
+                slots: pax, pax: pax
             })
         ];
     });
@@ -423,7 +426,8 @@ async function aplicarCesion(quien, opciones, escriturasExtra = () => []) {
         return [
             admin.writeOp(BDF_COLLECTIONS.DAYS, dateStr, dayPayload(dateStr, revision.cap, salidas), dia.updateTime),
             historyOp(actionType, quien.userKey, {
-                date: dateStr, fromCenter: givingCenter, toCenter: receivingCenter, spots: spots
+                date: dateStr, fromCenter: givingCenter, toCenter: receivingCenter,
+                slots: spots, spots: spots
             }),
             ...escriturasExtra()
         ];
@@ -481,9 +485,17 @@ async function opCreateRequest(quien, body) {
     const id = admin.newDocId();
     const resultado = await admin.runTransaction(async () => [
         admin.createOp(BDF_COLLECTIONS.REQUESTS, id, limpio),
-        historyOp(tipo === 'swap' ? 'swap_request' : 'petition', quien.userKey, {
-            initiatorCenter: iniciador, targetCenter: destinatario, date: limpio.date || limpio.dateA
-        })
+        historyOp(tipo === 'swap' ? 'swap_request' : 'petition', quien.userKey, tipo === 'swap'
+            ? {
+                centerA: limpio.centerA, centerB: limpio.centerB,
+                dateA: limpio.dateA, dateB: limpio.dateB,
+                paxA: limpio.paxA, paxB: limpio.paxB,
+                initiatorCenter: iniciador, targetCenter: destinatario
+            }
+            : {
+                fromCenter: iniciador, toCenter: destinatario,
+                date: limpio.date, slots: limpio.requestedPax, isFull: limpio.isFull
+            })
     ]);
     if (!resultado.ok) return respond(409, { error: 'No se ha podido registrar la propuesta.' });
     return respond(200, { ok: true, id });
@@ -593,9 +605,12 @@ async function cerrarPeticion(quien, body, campoPermitido, actionType, mensajePr
     const resultado = await admin.runTransaction(async () => [
         admin.deleteOp(BDF_COLLECTIONS.REQUESTS, requestId, peticion.updateTime),
         historyOp(actionType, quien.userKey, {
+            fromCenter: normCenter(req.initiatorCenter),
+            toCenter: normCenter(req.targetCenter),
             initiatorCenter: normCenter(req.initiatorCenter),
             targetCenter: normCenter(req.targetCenter),
-            date: req.date || req.dateA || ''
+            date: req.date || req.dateA || '',
+            slots: Number(req.requestedPax) || Number(req.paxA) || 0
         })
     ]);
     if (!resultado.ok) return respond(409, { error: 'No se ha podido cerrar la solicitud. Vuelve a intentarlo.' });

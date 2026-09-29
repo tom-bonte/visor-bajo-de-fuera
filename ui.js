@@ -600,11 +600,11 @@ function renderHistoryView() {
                     icon = '➡️';
                     desc = `<b>${cName}</b> movió su salida de <b>${escapeHtml(d.slots || '—')} plazas</b> del día <b>${escapeHtml(d.from || d.oldDate)}</b> al <b>${escapeHtml(d.to || d.newDate)}</b>.`;
                     badgeClass = 'bg-indigo-100 text-indigo-800';
-                } else if (type === 'swap_salidas' || type === 'swap') {
-                    title = 'Intercambio';
+                } else if (type === 'swap_salidas' || type === 'swap' || type === 'accept_swap') {
+                    title = type === 'accept_swap' ? 'Intercambio Aceptado' : 'Intercambio';
                     icon = '🔀';
-                    const cACode = USER_CENTER_KEYS[d.centerA] || d.centerA;
-                    const cBCode = USER_CENTER_KEYS[d.centerB] || d.centerB;
+                    const cACode = USER_CENTER_KEYS[d.centerA || d.initiatorCenter] || d.centerA || d.initiatorCenter;
+                    const cBCode = USER_CENTER_KEYS[d.centerB || d.targetCenter] || d.centerB || d.targetCenter;
                     const cAInfo = safeCenter(cACode);
                     const cBInfo = safeCenter(cBCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${cAInfo.color} ${cAInfo.text}">${cAInfo.name}</span><span class="text-slate-400 text-xs mx-1">↔️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${cBInfo.color} ${cBInfo.text}">${cBInfo.name}</span>`;
@@ -613,48 +613,63 @@ function renderHistoryView() {
                 } else if (type === 'petition') {
                     title = 'Petición de Plazas';
                     icon = '🤲';
-                    const fromCode = USER_CENTER_KEYS[d.fromCenter] || d.fromCenter || log.centerKey;
-                    const toCode = USER_CENTER_KEYS[d.toCenter] || d.toCenter;
+                    const fromCode = USER_CENTER_KEYS[d.fromCenter || d.initiatorCenter] || d.fromCenter || d.initiatorCenter || log.centerKey;
+                    const toCode = USER_CENTER_KEYS[d.toCenter || d.targetCenter] || d.toCenter || d.targetCenter;
                     const fromInfo = safeCenter(fromCode);
                     const toInfo = safeCenter(toCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${fromInfo.color} ${fromInfo.text}">${fromInfo.name}</span><span class="text-slate-400 text-xs mx-1">➡️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${toInfo.color} ${toInfo.text}">${toInfo.name}</span>`;
-                    const spotsText = d.isFull ? 'el barco completo' : `${escapeHtml(d.slots)} plazas`;
+                    const spotsText = d.isFull ? 'el barco completo' : `${escapeHtml(d.slots || d.spots || '—')} plazas`;
                     desc = `<b>${fromInfo.name}</b> solicitó <b>${spotsText}</b> a <b>${toInfo.name}</b> para el <b>${escapeHtml(d.date)}</b>.`;
                     badgeClass = 'bg-blue-100 text-blue-800';
                     if (d.note) desc += `<br><span class="text-slate-400 italic">"${escapeHtml(d.note)}"</span>`;
                 } else if (type === 'transfer_proposal') {
                     title = 'Propuesta de Cesión';
                     icon = '🎁';
-                    const fromCode = USER_CENTER_KEYS[d.fromCenter] || d.fromCenter || log.centerKey;
-                    const toCode = USER_CENTER_KEYS[d.toCenter] || d.toCenter;
+                    const fromCode = USER_CENTER_KEYS[d.fromCenter || d.initiatorCenter] || d.fromCenter || d.initiatorCenter || log.centerKey;
+                    const toCode = USER_CENTER_KEYS[d.toCenter || d.targetCenter] || d.toCenter || d.targetCenter;
                     const fromInfo = safeCenter(fromCode);
                     const toInfo = safeCenter(toCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${fromInfo.color} ${fromInfo.text}">${fromInfo.name}</span><span class="text-slate-400 text-xs mx-1">➡️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${toInfo.color} ${toInfo.text}">${toInfo.name}</span>`;
-                    const spotsText = d.isFull ? 'el barco completo' : `${escapeHtml(d.slots)} plazas`;
+                    const spotsText = d.isFull ? 'el barco completo' : `${escapeHtml(d.slots || d.spots || '—')} plazas`;
                     desc = `<b>${fromInfo.name}</b> ofreció ceder <b>${spotsText}</b> a <b>${toInfo.name}</b> para el <b>${escapeHtml(d.date)}</b>.`;
                     badgeClass = 'bg-amber-100 text-amber-800';
                     if (d.note) desc += `<br><span class="text-slate-400 italic">"${escapeHtml(d.note)}"</span>`;
-                } else if (type === 'transfer_salida' || type === 'transfer' || type === 'donation') {
-                    title = 'Cesión de Plazas';
+                } else if (type === 'transfer_salida' || type === 'transfer' || type === 'donation' || type === 'spot_transfer' || type === 'accept_petition') {
+                    title = type === 'accept_petition' ? 'Petición Aceptada' : 'Cesión de Plazas';
                     icon = '🤝';
                     const fromCode = USER_CENTER_KEYS[d.from || d.fromCenter] || d.from || d.fromCenter || log.centerKey;
                     const toCode = USER_CENTER_KEYS[d.to || d.toCenter] || d.to || d.toCenter;
                     const fromInfo = safeCenter(fromCode);
                     const toInfo = safeCenter(toCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${fromInfo.color} ${fromInfo.text}">${fromInfo.name}</span><span class="text-slate-400 text-xs mx-1">➡️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${toInfo.color} ${toInfo.text}">${toInfo.name}</span>`;
-                    desc = `<b>${fromInfo.name}</b> transfirió <b>${escapeHtml(d.slots || d.pax)} plazas</b> a <b>${toInfo.name}</b> para el <b>${escapeHtml(d.date)}</b>.`;
+                    desc = `<b>${fromInfo.name}</b> transfirió <b>${escapeHtml(d.slots || d.pax || d.spots || '—')} plazas</b> a <b>${toInfo.name}</b> para el <b>${escapeHtml(d.date)}</b>.`;
                     badgeClass = 'bg-emerald-100 text-emerald-800';
                     if (d.note) desc += `<br><span class="text-slate-400 italic">"${escapeHtml(d.note)}"</span>`;
                 } else if (type === 'swap_request') {
                     title = 'Propuesta de Intercambio';
                     icon = '🔀';
-                    const cACode = USER_CENTER_KEYS[d.centerA] || d.centerA;
-                    const cBCode = USER_CENTER_KEYS[d.centerB] || d.centerB;
+                    const cACode = USER_CENTER_KEYS[d.centerA || d.initiatorCenter] || d.centerA || d.initiatorCenter;
+                    const cBCode = USER_CENTER_KEYS[d.centerB || d.targetCenter] || d.centerB || d.targetCenter;
                     const cAInfo = safeCenter(cACode);
                     const cBInfo = safeCenter(cBCode);
                     headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${cAInfo.color} ${cAInfo.text}">${cAInfo.name}</span><span class="text-slate-400 text-xs mx-1">↔️</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${cBInfo.color} ${cBInfo.text}">${cBInfo.name}</span>`;
                     desc = `<b>${cAInfo.name}</b> (${escapeHtml(d.paxA || '—')} pl. el ${escapeHtml(d.dateA)}) propuso permuta de fechas con <b>${cBInfo.name}</b> (${escapeHtml(d.paxB || '—')} pl. el ${escapeHtml(d.dateB)}).`;
                     badgeClass = 'bg-purple-100 text-purple-800';
+                } else if (type === 'cancel_request' || type === 'reject_request') {
+                    // Faltaban las dos: una propuesta retirada o rechazada
+                    // aparecía como "Operación", sin decir quién ni sobre qué.
+                    const retirada = type === 'cancel_request';
+                    title = retirada ? 'Propuesta Retirada' : 'Propuesta Rechazada';
+                    icon = retirada ? '↩️' : '✖️';
+                    const fromCode = USER_CENTER_KEYS[d.fromCenter || d.initiatorCenter] || d.fromCenter || d.initiatorCenter || log.centerKey;
+                    const toCode = USER_CENTER_KEYS[d.toCenter || d.targetCenter] || d.toCenter || d.targetCenter;
+                    const fromInfo = safeCenter(fromCode);
+                    const toInfo = safeCenter(toCode);
+                    headerPills = `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${fromInfo.color} ${fromInfo.text}">${fromInfo.name}</span><span class="text-slate-400 text-xs mx-1">${retirada ? '↩️' : '✖️'}</span><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${toInfo.color} ${toInfo.text}">${toInfo.name}</span>`;
+                    desc = retirada
+                        ? `<b>${fromInfo.name}</b> retiró su propuesta a <b>${toInfo.name}</b>${d.date ? ` para el <b>${escapeHtml(d.date)}</b>` : ''}.`
+                        : `<b>${toInfo.name}</b> rechazó la propuesta de <b>${fromInfo.name}</b>${d.date ? ` para el <b>${escapeHtml(d.date)}</b>` : ''}.`;
+                    badgeClass = retirada ? 'bg-slate-100 text-slate-700' : 'bg-rose-100 text-rose-800';
                 } else if (type === 'release') {
                     title = 'Liberación al Pool';
                     icon = '🔓';
