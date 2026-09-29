@@ -18,7 +18,7 @@ date,dive_center,spots
 7/10/26,Islas Hormigas,7
 7/10/26,Naranjito,6
 8/10/26,Mangamar,6
-8/10/26,Moondive,7
+8/10/26,X,7
 9/10/26,Divers,7
 9/10/26,Planeta Azul,6
 10/10/26,Mangamar,8
@@ -29,8 +29,8 @@ date,dive_center,spots
 11/10/26,Islas Hormigas,8
 11/10/26,Planeta Azul,8
 11/10/26,Clubes,6
+12/10/26,Planeta Azul,7
 12/10/26,Clubes,6
-12/10/26,Moondive,7
 13/10/26,Divers,6
 13/10/26,Naranjito,7
 14/10/26,Mangamar,7
@@ -38,19 +38,19 @@ date,dive_center,spots
 15/10/26,Islas Hormigas,6
 15/10/26,X,7
 16/10/26,Islas Hormigas,6
-16/10/26,X,7
+16/10/26,Moondive,7
 17/10/26,Mangamar,7
 17/10/26,Clubes,6
 18/10/26,Naranjito,7
 18/10/26,Planeta Azul,6
 19/10/26,Divers,6
 19/10/26,Planeta Azul,7
-20/10/26,Islas Hormigas,7
 20/10/26,Mangamar,6
+20/10/26,Naranjito,7
 21/10/26,X,7
 21/10/26,Clubes,6
-22/10/26,Naranjito,6
-22/10/26,Planeta Azul,7
+22/10/26,Islas Hormigas,6
+22/10/26,Moondive,7
 23/10/26,Divers,6
 23/10/26,Naranjito,7
 24/10/26,Divers,7
@@ -65,8 +65,8 @@ date,dive_center,spots
 28/10/26,Moondive,6
 29/10/26,Mangamar,7
 29/10/26,Clubes,6
+30/10/26,Naranjito,6
 30/10/26,Planeta Azul,7
-30/10/26,Moondive,6
 31/10/26,Islas Hormigas,6
 31/10/26,Planeta Azul,7
 1/11/26,X,7
