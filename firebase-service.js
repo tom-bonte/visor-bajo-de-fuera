@@ -533,6 +533,10 @@ async function callBdfWrite(op, payload = {}) {
     const user = auth.currentUser;
     if (!user) throw new Error('Tu sesión ha caducado. Vuelve a iniciar sesión.');
 
+    // Contador de escrituras a medio hacer: auto-update.js lo mira para no
+    // recargar la app justo cuando alguien está guardando unas plazas.
+    window.bdfEscriturasEnVuelo = (window.bdfEscriturasEnVuelo || 0) + 1;
+
     let res;
     try {
         const idToken = await user.getIdToken();
@@ -543,6 +547,8 @@ async function callBdfWrite(op, payload = {}) {
         });
     } catch (e) {
         throw new Error('No hay conexión con el servidor. No se ha cambiado nada.');
+    } finally {
+        window.bdfEscriturasEnVuelo = Math.max(0, (window.bdfEscriturasEnVuelo || 1) - 1);
     }
 
     let data = {};

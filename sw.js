@@ -1,11 +1,12 @@
 // Service Worker para Visor Bajo de Fuera (PWA & Offline App Shell)
-const CACHE_NAME = 'bdf-cache-v7.8';
+const CACHE_NAME = 'bdf-cache-v7.9';
 
 const PRECACHE_ASSETS = [
     './',
     './index.html',
     './styles.css',
     './error-reporter.js',
+    './auto-update.js',
     './DragDropTouch.js',
     './config.js',
     './utils.js',
@@ -77,6 +78,13 @@ self.addEventListener('fetch', (event) => {
                 })
                 .catch(() => caches.match('./index.html') || caches.match(request))
         );
+        return;
+    }
+
+    // version.json nunca se cachea: es justo el fichero que sirve para saber si
+    // la copia guardada se ha quedado vieja.
+    if (url.pathname.endsWith('version.json')) {
+        event.respondWith(fetch(request));
         return;
     }
 
