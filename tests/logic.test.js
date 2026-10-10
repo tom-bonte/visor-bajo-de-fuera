@@ -246,4 +246,48 @@ ok('la app enseña los errores a través del traductor', /friendlyError\(/.test(
 check('ya no queda ningún err.message crudo en pantalla',
     /showNotification\('Error', err\.message/.test(appSrc), false);
 
+// -------------------------------------------------------------------------
+section('Un listener caído se vuelve a enganchar solo');
+
+// Firestore reintenta por su cuenta mientras puede; cuando llama al callback de
+// error, ese listener está muerto y la pestaña se queda con datos congelados.
+// El 10/10/2026 llegó un "FirebaseError: An internal error occurred." desde un
+// Chrome de Windows: si hubiera sido en un listener, esa escuela habría seguido
+// viendo el calendario de antes sin enterarse.
+
+const { listenerCaido } = app;
+ok('existe el reenganche', typeof listenerCaido === 'function');
+
+let reenganches = 0;
+const intentos = { n: 0 };
+const esperas = [];
+const setTimeoutReal = app.setTimeout;
+app.evaluate('globalThis.__esperas = [];');
+app.setTimeout = (fn, ms) => { esperas.push(ms); reenganches++; return 0; };
+
+listenerCaido('el calendario', { code: 'unavailable', message: 'x' }, () => {}, intentos);
+check('un corte de red programa un reintento', reenganches, 1);
+check('el primero, a los 2 segundos', esperas[0], 2000);
+
+listenerCaido('el calendario', { code: 'internal', message: 'An internal error occurred.' }, () => {}, intentos);
+listenerCaido('el calendario', { code: 'internal', message: 'x' }, () => {}, intentos);
+check('si sigue cayendo, espera cada vez más', esperas, [2000, 5000, 15000]);
+
+for (let i = 0; i < 10; i++) listenerCaido('el calendario', { code: 'internal' }, () => {}, intentos);
+check('pero nunca más de un minuto', esperas[esperas.length - 1], 60000);
+
+const reenganchesPrevios = reenganches;
+listenerCaido('las solicitudes', { code: 'permission-denied', message: 'Missing or insufficient permissions.' }, () => {}, { n: 0 });
+check('un permiso denegado NO se reintenta (no es un corte)', reenganches, reenganchesPrevios);
+
+app.setTimeout = setTimeoutReal;
+
+const servicio = leer('firebase-service.js');
+['listenCurrentDay(dateStr)', 'listenMonthOverview(startDateOrYear, endDateOrMonth)', 'listenHistoryLogs()', 'listenBdfRequests()'].forEach(fn => {
+    ok(`${fn.split('(')[0]} se vuelve a enganchar`, servicio.includes(`() => ${fn}`));
+});
+check('ningún listener se queda sin reenganche',
+    (servicio.match(/listenerCaido\(/g) || []).length, 5);  // la definición + los cuatro usos
+ok('y al recibir datos se olvida de los reintentos', /reintentosRango\.n = 0/.test(servicio));
+
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));

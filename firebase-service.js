@@ -148,6 +148,48 @@ function describeFirestoreError(err, action = 'guardar los cambios') {
 }
 
 /**
+ * Qué hacer cuando a un listener en vivo se le corta la conexión.
+ *
+ * Firestore reintenta solo mientras puede; si acaba llamando al callback de
+ * error, ese listener está MUERTO y no se vuelve a conectar nunca. La pestaña
+ * se queda con el calendario congelado: la escuela ve plazas viejas y no tiene
+ * forma de saberlo. Pasó el 10/10/2026 ("FirebaseError: An internal error
+ * occurred." en un Chrome de Windows).
+ *
+ * Así que se vuelve a enganchar solo, esperando cada vez un poco más por si el
+ * problema dura. Con 'permission-denied' no se reintenta: eso no es un corte,
+ * es que esa cuenta no debe leer eso, y reintentar sería dar vueltas en balde.
+ *
+ * @param {string} nombre - para el registro
+ * @param {Error} error
+ * @param {Function} volverAEnganchar - la propia función que crea el listener
+ * @param {Object} intentos - contador propio de cada listener
+ */
+const REENGANCHE_MS = [2000, 5000, 15000, 30000, 60000];
+
+function listenerCaido(nombre, error, volverAEnganchar, intentos) {
+    reportFailure(error, `Error escuchando ${nombre} en Firestore`);
+
+    if (error && error.code === 'permission-denied') return;
+
+    const n = intentos.n || 0;
+    const espera = REENGANCHE_MS[Math.min(n, REENGANCHE_MS.length - 1)];
+    intentos.n = n + 1;
+
+    console.log(`[BDF] Reconectando ${nombre} en ${espera / 1000}s (intento ${intentos.n}).`);
+    setTimeout(() => {
+        try { volverAEnganchar(); } catch (e) { reportFailure(e, `Error reconectando ${nombre}`); }
+    }, espera);
+}
+
+// Cada listener lleva su propia cuenta de reintentos; se pone a cero en cuanto
+// vuelven a llegar datos.
+const reintentosDia = { n: 0 };
+const reintentosRango = { n: 0 };
+const reintentosHistorial = { n: 0 };
+const reintentosSolicitudes = { n: 0 };
+
+/**
  * Inicia la escucha en tiempo real de los datos del día seleccionado.
  * @param {string} dateStr - 'YYYY-MM-DD'
  */
@@ -171,10 +213,11 @@ function listenCurrentDay(dateStr) {
                 allocations: {}
             };
         }
+        reintentosDia.n = 0;
         monthDaysCache[dateStr] = currentDayData;
         renderAll();
     }, (error) => {
-        reportFailure(error, "Error escuchando día en Firestore");
+        listenerCaido('el día', error, () => listenCurrentDay(dateStr), reintentosDia);
     });
 }
 
@@ -217,9 +260,10 @@ function listenMonthOverview(startDateOrYear, endDateOrMonth) {
                 const d = doc.data() || {};
                 monthDaysCache[doc.id] = { id: doc.id, date: doc.id, ...d };
             });
+            reintentosRango.n = 0;
             renderAll();
         }, (error) => {
-            reportFailure(error, "Error escuchando rango en Firestore");
+            listenerCaido('el calendario', error, () => listenMonthOverview(startDateOrYear, endDateOrMonth), reintentosRango);
         });
 }
 
@@ -269,11 +313,12 @@ function listenHistoryLogs() {
                 logs.push({ id: doc.id, ...doc.data() });
             });
             historyLogs = logs;
+            reintentosHistorial.n = 0;
             if (activeViewMode === 'historial') {
                 renderHistoryView();
             }
         }, (error) => {
-            reportFailure(error, "Error escuchando historial en Firestore");
+            listenerCaido('el historial', error, () => listenHistoryLogs(), reintentosHistorial);
         });
 }
 
@@ -340,11 +385,12 @@ function listenBdfRequests() {
             });
             bdfRequests = reqs;
             updateNotificationsUI();
+            reintentosSolicitudes.n = 0;
             if (activeViewMode === 'mensual') {
                 renderAll();
             }
         }, (error) => {
-            reportFailure(error, "Error escuchando solicitudes en Firestore");
+            listenerCaido('las solicitudes', error, () => listenBdfRequests(), reintentosSolicitudes);
         });
 }
 
