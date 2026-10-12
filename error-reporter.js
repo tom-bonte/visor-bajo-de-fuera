@@ -30,10 +30,20 @@
     }
 
     /** Un fallo, en el formato mínimo que necesitamos para entenderlo después. */
-    function normalize(kind, error, message) {
+    /**
+     * @param {string} kind  'error' | 'promesa' | 'avisado'
+     * @param {Error} error
+     * @param {string} donde  Qué estaba haciendo la app. Se guarda APARTE del
+     *   mensaje: antes se usaba sólo como texto de repuesto cuando el error no
+     *   traía mensaje propio, y como los de Firebase siempre traen uno, el dato
+     *   se perdía. Resultado: el 11/10/2026 llegó un "Missing or insufficient
+     *   permissions" sin ninguna pista de QUÉ se estaba leyendo.
+     */
+    function normalize(kind, error, donde) {
         return {
             kind: kind,
-            message: (error && error.message) || message || String(error || 'error desconocido'),
+            donde: donde || null,
+            message: (error && error.message) || donde || String(error || 'error desconocido'),
             stack: (error && error.stack) || null,
             url: typeof location !== 'undefined' ? location.href : '',
             at: new Date().toISOString()
@@ -46,7 +56,8 @@
 
         if (window.Sentry && window.Sentry.captureException) {
             window.Sentry.captureException(entry.original || new Error(entry.message), {
-                tags: { tipo: entry.kind, centro: context.centro }
+                tags: { tipo: entry.kind, centro: context.centro, origen: entry.donde || 'sin indicar' },
+                extra: { donde: entry.donde, sesionIniciada: context.sesionIniciada }
             });
             return;
         }
@@ -129,7 +140,8 @@
         if (!window.Sentry || !window.Sentry.captureException) return;
         buffer.forEach(function (entry) {
             window.Sentry.captureException(entry.original || new Error(entry.message), {
-                tags: { tipo: entry.kind, centro: context.centro }
+                tags: { tipo: entry.kind, centro: context.centro, origen: entry.donde || 'sin indicar' },
+                extra: { donde: entry.donde }
             });
         });
         buffer = [];

@@ -24,7 +24,7 @@ auth.onAuthStateChanged((user) => {
     // sin saber de qué escuela viene no se puede reproducir.
     if (window.errorReporter) {
         errorReporter.start(typeof SENTRY_LOADER_URL !== 'undefined' ? SENTRY_LOADER_URL : '', { centro: currentUserKey });
-        errorReporter.setContext({ centro: currentUserKey });
+        errorReporter.setContext({ centro: currentUserKey, sesionIniciada: !!user });
     }
 
     // Iniciar escucha del rango visible actual, del historial y de solicitudes pendientes

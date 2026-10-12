@@ -290,4 +290,48 @@ check('ningún listener se queda sin reenganche',
     (servicio.match(/listenerCaido\(/g) || []).length, 5);  // la definición + los cuatro usos
 ok('y al recibir datos se olvida de los reintentos', /reintentosRango\.n = 0/.test(servicio));
 
+// -------------------------------------------------------------------------
+section('Permiso denegado: cerrar sesión no es lo mismo que un fallo');
+
+// El 11/10/2026 llegó "Missing or insufficient permissions" de Naranjito, con
+// la sesión iniciada y en mitad de una tarde de trabajo (siguió trabajando dos
+// minutos después). El informe no decía QUÉ se estaba leyendo, así que no se
+// pudo diagnosticar. Ahora se distinguen los dos casos y se dice el origen.
+
+const avisos = [];
+const reportFailureReal = app.reportFailure;
+app.reportFailure = (e, donde) => avisos.push(donde);
+const setTimeoutReal2 = app.setTimeout;
+app.setTimeout = () => 0;
+
+// a) Sin sesión: es lo normal al cerrar sesión, no se avisa a nadie.
+app.evaluate('auth.currentUser = null;');
+avisos.length = 0;
+app.listenerCaido('las solicitudes', { code: 'permission-denied' }, () => {}, { n: 0 });
+check('sin sesión, no se manda nada a la alarma', avisos.length, 0);
+
+// b) Con sesión: eso sí es raro. Se avisa Y se renueva la sesión una vez.
+let renovaciones = 0, reenganchado = 0;
+app.evaluate('auth.currentUser = { getIdToken: () => { globalThis.__renov = (globalThis.__renov||0)+1; return Promise.resolve("t"); } };');
+avisos.length = 0;
+const cuenta = { n: 0 };
+app.listenerCaido('las solicitudes', { code: 'permission-denied' }, () => { reenganchado++; }, cuenta);
+check('con sesión iniciada, sí se avisa', avisos.length, 1);
+ok('y el aviso dice que había sesión', /CON la sesión iniciada/.test(avisos[0]));
+check('se marca que ya se renovó', cuenta.renovado, true);
+
+avisos.length = 0;
+app.listenerCaido('las solicitudes', { code: 'permission-denied' }, () => { reenganchado++; }, cuenta);
+check('no se renueva en bucle', cuenta.renovado, true);
+
+app.reportFailure = reportFailureReal;
+app.setTimeout = setTimeoutReal2;
+
+// c) El "dónde" tiene que llegar a Sentry, que es lo que faltaba.
+const reporter = leer('error-reporter.js');
+ok('el origen viaja como etiqueta', /origen: entry\.donde/.test(reporter));
+ok('y también en los datos del informe', /extra: \{ donde: entry\.donde/.test(reporter));
+ok('normalize guarda el dónde aparte del mensaje', /donde: donde \|\| null/.test(reporter));
+ok('la alarma sabe si había sesión', /sesionIniciada/.test(leer('app.js')));
+
 process.exit(report('LÓGICA DE NEGOCIO — Visor Bajo de Fuera'));

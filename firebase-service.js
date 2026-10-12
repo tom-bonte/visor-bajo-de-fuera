@@ -168,9 +168,33 @@ function describeFirestoreError(err, action = 'guardar los cambios') {
 const REENGANCHE_MS = [2000, 5000, 15000, 30000, 60000];
 
 function listenerCaido(nombre, error, volverAEnganchar, intentos) {
-    reportFailure(error, `Error escuchando ${nombre} en Firestore`);
+    // Un 'permission-denied' tiene dos lecturas muy distintas:
+    //
+    //  - Si la sesión ya no existe (alguien ha cerrado sesión, o ha caducado),
+    //    es lo normal: el listener de solicitudes deja de tener permiso justo
+    //    en ese instante. No es un fallo y no merece asustar a nadie.
+    //  - Si SEGUIMOS con sesión iniciada, entonces sí es raro, y conviene
+    //    verlo. Puede ser un token caducado que no se ha renovado; se fuerza
+    //    la renovación y se vuelve a intentar UNA vez, que además lo arregla.
+    if (error && error.code === 'permission-denied') {
+        const conSesion = typeof auth !== 'undefined' && auth.currentUser;
+        if (!conSesion) {
+            console.log(`[BDF] ${nombre}: sin sesión, se deja de escuchar (normal al cerrar sesión).`);
+            return;
+        }
 
-    if (error && error.code === 'permission-denied') return;
+        reportFailure(error, `Permiso denegado escuchando ${nombre} CON la sesión iniciada`);
+
+        if (intentos.renovado) return;      // ya se intentó; no insistir
+        intentos.renovado = true;
+        console.log(`[BDF] ${nombre}: renovando la sesión y reintentando una vez.`);
+        auth.currentUser.getIdToken(true)
+            .then(() => volverAEnganchar())
+            .catch(e => reportFailure(e, `No se ha podido renovar la sesión para ${nombre}`));
+        return;
+    }
+
+    reportFailure(error, `Error escuchando ${nombre} en Firestore`);
 
     const n = intentos.n || 0;
     const espera = REENGANCHE_MS[Math.min(n, REENGANCHE_MS.length - 1)];
